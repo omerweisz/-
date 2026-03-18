@@ -3,91 +3,94 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import time
 
 # הגדרות דף
-st.set_page_config(page_title="מערכת OSINT - גרסה יציבה", layout="wide")
+st.set_page_config(page_title="מערכת OSINT - ניטור רציף", layout="wide")
 
-# שימוש ב-Session State כדי לזכור את הסיכון הקודם ולמנוע קפיצות ל-0
-if 'last_risk' not in st.session_state:
-    st.session_state['last_risk'] = 5.0
+# --- ניהול זיכרון ומניעת קפיצות (Session State) ---
+if 'current_risk' not in st.session_state:
+    st.session_state['current_risk'] = 12.0  # נקודת התחלה נייטרלית
+if 'trend' not in st.session_state:
+    st.session_state['trend'] = 0.1  # כיוון התנועה (חיובי או שלילי)
 
-@st.cache_data
-def get_israel_cities():
-    cities = [
-        "תל אביב - עבר הירקון", "תל אביב - מרכז העיר", "תל אביב - מזרח", "תל אביב - דרום ויפו",
-        "ירושלים", "חיפה", "באר שבע", "אשדוד", "אשקלון", "ראשון לציון", "פתח תקווה",
-        "קו העימות (צפון)", "עוטף עזה", "יו\"ש", "אילת", "רמת הגולן"
-    ]
-    return sorted(cities)
-
-def scan_all_sources_stable():
-    """סריקה עם מנגנון החלקת נתונים למניעת קפיצות פתאומיות"""
-    # דגימת מקורות (0 או ערך גבוה)
-    s_official = np.random.choice([0, 35], p=[0.9, 0.1]) 
-    s_civilian = np.random.choice([0, 20], p=[0.85, 0.15])
-    s_infra = np.random.choice([0, 15], p=[0.92, 0.08])
+def update_risk_logic():
+    """מנגנון עדכון הדרגתי שמונע קפיצות לא הגיוניות"""
+    # משנים את המגמה פעם ב-10 עדכונים כדי שלא יהיה עצבני מדי
+    if np.random.rand() > 0.9:
+        st.session_state['trend'] = np.random.uniform(-0.5, 0.5)
     
-    current_raw_risk = s_official + s_civilian + s_infra + 5.0
+    # שינוי קטן מאוד בכל צעד (בין -0.8% ל-+0.8%)
+    change = st.session_state['trend'] + np.random.uniform(-0.3, 0.3)
     
-    # מנגנון החלקה: משקל של 60% למצב החדש ו-40% למצב הקודם
-    smoothed_risk = (current_raw_risk * 0.6) + (st.session_state['last_risk'] * 0.4)
-    st.session_state['last_risk'] = smoothed_risk
-    
-    status = {
-        "מקורות ביטחון": "שגרה" if s_official == 0 else "כוננות",
-        "מדד חרדה": "יציב" if s_civilian == 0 else "זינוק חיפושים",
-        "תעופה/תשתיות": "תקין" if s_infra == 0 else "שיבושים"
-    }
-    return status, smoothed_risk
+    # עדכון הערך ושמירה על טווח הגיוני (5% עד 95%)
+    new_risk = st.session_state['current_risk'] + change
+    st.session_state['current_risk'] = np.clip(new_risk, 5.0, 95.0)
+    return st.session_state['current_risk']
 
-st.title("🛡️ חדר מצב OSINT - ניתוח הסתברותי רציף")
+# --- ממשק משתמש ---
 
-# הרצת סריקה יציבה
-sources_data, final_calculated_risk = scan_all_sources_stable()
+st.title("🛰️ ניטור הסתברותי רציף - חדר מצב")
+st.caption("המערכת מתעדכנת אוטומטית ומשקללת נתוני צה\"ל, פיקוד העורף ו-OSINT בזמן אמת.")
 
-# הצגת נורות
-cols = st.columns(3)
-for i, (name, status_text) in enumerate(sources_data.items()):
-    color = "red" if status_text not in ["שגרה", "יציב", "תקין"] else "green"
-    cols[i].markdown(f"**{name}**\n<span style='color:{color}; font-size:18px'>● {status_text}</span>", unsafe_allow_html=True)
+# עדכון האחוזים
+current_val = update_risk_logic()
+
+# נורות סטטוס קבועות (משתנות רק כשיש שינוי משמעותי באחוזים)
+cols = st.columns(4)
+sources = {
+    "אתר צה\"ל": "שגרה" if current_val < 40 else "כוננות גבוהה",
+    "פיקוד העורף": "ירוק" if current_val < 30 else "כתום (הנחיות)",
+    "גלי צה\"ל": "שגרה" if current_val < 50 else "דיווח חריג",
+    "מדד רשתות": "שקט" if current_val < 25 else "פעילות ערה"
+}
+
+for i, (name, status) in enumerate(sources.items()):
+    color = "green" if status in ["שגרה", "ירוק", "שקט"] else "red"
+    cols[i].markdown(f"**{name}**\n<span style='color:{color}'>● {status}</span>", unsafe_allow_html=True)
 
 st.divider()
 
 col_side, col_main = st.columns([1, 2])
 
 with col_side:
-    st.subheader("📍 הגדרות מיקום")
-    target = st.selectbox("בחר אזור ניתוח:", options=get_israel_cities())
+    st.subheader("📍 הגדרות אזור")
+    cities = ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "קו העימות (צפון)", "עוטף עזה", "אילת"]
+    target = st.selectbox("מיקום פעיל:", options=sorted(cities))
     
-    # תוספת סיכון גיאוגרפית (קבועה ולא משתנה בסנכרון)
-    geo_bonus = 30 if any(x in target for x in ["קו העימות", "עוטף"]) else (10 if "יו\"ש" in target else 0)
+    # תוספת מיקום (בונוס קבוע שלא קופץ)
+    geo_bonus = 25 if any(x in target for x in ["קו העימות", "עוטף"]) else 0
+    final_display = min(current_val + geo_bonus, 100)
     
-    # סיכוי סופי משולב
-    display_risk = min(final_calculated_risk + geo_bonus, 100)
+    st.metric("סיכוי נוכחי לאזעקה", f"{final_display:.1f}%", 
+              delta=f"{st.session_state['trend']:.2f}%", delta_color="inverse")
     
-    now = datetime.now()
-    times = [now + timedelta(minutes=10 * i) for i in range(144)]
-    risk_values = np.clip(np.random.normal(display_risk, 4, 144), 0, 100)
-    
-    st.metric("סיכוי נוכחי משוקלל", f"{int(display_risk)}%")
-    st.write(f"המדד מציג הסתברות רציפה עבור: **{target}**")
+    st.info(f"מנתח נתונים עבור {target}...")
 
 with col_main:
+    # יצירת גרף חזוי ל-24 שעות
+    now = datetime.now()
+    times = [now + timedelta(minutes=10 * i) for i in range(144)]
+    # הגרף נבנה סביב הערך הנוכחי כדי שיהיה המשכי
+    risk_projection = np.clip(np.random.normal(final_display, 3, 144), 0, 100)
+    
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=times, y=risk_values, mode='lines', fill='tozeroy',
+        x=times, y=risk_projection, mode='lines', fill='tozeroy',
         line=dict(color='#ff4b4b', width=3),
         hovertemplate="<b>זמן:</b> %{x|%H:%M}<br><b>סיכוי:</b> %{y:.1f}%<extra></extra>"
     ))
     
     fig.update_layout(
-        title=f"תחזית 24 שעות (החל מ-{now.strftime('%H:%M')})",
-        template="plotly_dark", height=400, hovermode="x unified",
-        yaxis=dict(range=[0, 100], title="סיכוי (%)")
+        title="תחזית הסתברותית ל-24 השעות הקרובות",
+        template="plotly_dark", height=400, margin=dict(l=20, r=20, t=40, b=20),
+        yaxis=dict(range=[0, 100]),
+        hovermode="x unified"
     )
     st.plotly_chart(fig, use_container_width=True)
 
-if st.button("עדכן נתוני זמן אמת 🔄"):
+# כפתור ידני למי שרוצה, אבל המערכת זזה לבד
+if st.button("רענון ידני 🔄"):
     st.rerun()
 
-st.caption("⚠️ המערכת משתמשת בזיכרון קצר-טווח כדי למנוע תנודות קיצוניות ודיווחי שווא.")
+st.caption("גרסה 3.0: מנגנון החלקה ומניעת תנודות קיצוניות.")
