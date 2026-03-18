@@ -7,13 +7,13 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - V20 LOCKED", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V21 PRO-HOVER", layout="wide")
 
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
     html, body, [data-testid="stAppViewContainer"] { background-color: #000; font-family: 'JetBrains Mono', monospace; color: white; }
-    .stPlotlyChart { background-color: transparent !important; pointer-events: none; } /* מבטל אינטראקציה של העכבר עם הגרף */
+    .stPlotlyChart { background-color: transparent !important; }
     #MainMenu, footer, header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
@@ -68,7 +68,7 @@ def auto_refresh_hamaal():
 
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {main_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {main_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | STRATEGIC V20</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | STRATEGIC V21</p>
             <h1 style="color: {main_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {main_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
                 <span style="color: {main_color};">●</span> {now.strftime('%H:%M:%S')} 
@@ -80,26 +80,44 @@ def auto_refresh_hamaal():
         st.markdown(f"""<div style="background: rgba(20,20,20,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 1px solid {main_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
     else: st.markdown("<div style='height: 62px;'></div>", unsafe_allow_html=True)
 
-    # יצירת גרף 24 שעות קבוע - ללא זום
+    # גרף 24 שעות - Hover פעיל, Zoom כבוי
     base_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
     full_day_times = [base_time + timedelta(minutes=i) for i in range(1440)]
     full_day_values = [get_risk(t, "GREEN") for t in full_day_times]
     
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=full_day_times, y=full_day_values, fill='tozeroy', line=dict(color="#222", width=2), hoverinfo='skip'))
-    fig.add_trace(go.Scatter(x=[now], y=[current_val], mode='markers', marker=dict(color=main_color, size=14, line=dict(color='white', width=2))))
+    # הגדרת הגרף עם Hover מותאם אישית
+    fig.add_trace(go.Scatter(
+        x=full_day_times, 
+        y=full_day_values, 
+        fill='tozeroy', 
+        line=dict(color="#222", width=2),
+        hovertemplate="<b>Time:</b> %{x|%H:%M}<br><b>Risk:</b> %{y:.1f}%<extra></extra>"
+    ))
+    
+    # נקודת המצב הנוכחי
+    fig.add_trace(go.Scatter(
+        x=[now], 
+        y=[current_val], 
+        mode='markers', 
+        marker=dict(color=main_color, size=14, line=dict(color='white', width=2)),
+        hoverinfo='skip'
+    ))
     
     fig.update_layout(
         margin=dict(l=0, r=0, t=10, b=0), 
-        height=150, 
+        height=160, 
         paper_bgcolor='rgba(0,0,0,0)', 
         plot_bgcolor='rgba(0,0,0,0)', 
-        xaxis=dict(visible=False, fixedrange=True), # ביטול זום בציר X
-        yaxis=dict(visible=False, range=[0, 110], fixedrange=True), # ביטול זום בציר Y
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="rgba(0,0,0,0.8)", font_size=12, font_family="JetBrains Mono"),
+        xaxis=dict(visible=False, fixedrange=True), 
+        yaxis=dict(visible=False, range=[0, 115], fixedrange=True), 
         showlegend=False,
-        dragmode=False # ביטול גרירה
+        dragmode=False 
     )
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'staticPlot': False})
+    
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
     cols = st.columns(7)
     all_keys = ["YNET", "וואלה", "ישראל היום", "צופר", "פקע\"ר", "צה\"ל", "אבו-עלי", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
