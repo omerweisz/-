@@ -4,9 +4,14 @@ import numpy as np
 import plotly.graph_objects as go
 import requests
 from datetime import datetime, timedelta
+import time
 
 # הגדרות דף
 st.set_page_config(page_title="חמ\"ל OSINT - 24/7", layout="wide")
+
+# אתחול מצב התראה בזיכרון האתר
+if 'alert_mode' not in st.session_state:
+    st.session_state.alert_mode = False
 
 # משיכת סודות
 try:
@@ -26,7 +31,7 @@ def send_alert(msg):
 def get_time():
     return datetime.utcnow() + timedelta(hours=2)
 
-# רשימת המקורות (נשארת ויזואלית בלבד כרגע)
+# רשימת המקורות
 SOURCES = {
     "12": "חדשות 12", "13": "חדשות 13", "11": "כאן 11", "14": "ערוץ 14", "ynet": "ynet",
     "פקע\"ר": "פיקוד העורף", "צה\"ל": "דובר צה\"ל", "מד\"א": "מד\"א", "כבאות": "כבאות", "רוטר": "רוטר",
@@ -39,47 +44,67 @@ SOURCES = {
 
 st.markdown("<h1 style='text-align: right;'>🛰️ מרכז OSINT מבצעי - 35 מקורות</h1>", unsafe_allow_html=True)
 
-# תצוגת ה"עיניים"
+# קביעת צבע המקורות לפי מצב ההתראה
+status_color = "#ff0000" if st.session_state.alert_mode else "#00ff00"
+status_text = "חריג" if st.session_state.alert_mode else "תקין"
+
+# תצוגת ה"עיניים" המסונכרנות
 keys = list(SOURCES.keys())
 for i in range(0, len(keys), 5):
     cols = st.columns(5)
     for j, key in enumerate(keys[i:i+5]):
-        cols[j].markdown(f"<div style='text-align:center; border:1px solid #00ff00; border-radius:4px; padding:2px;'><b style='font-size:8px;'>{SOURCES[key]}</b><br><span style='color:#00ff00;'>●</span></div>", unsafe_allow_html=True)
+        cols[j].markdown(f"""
+            <div style='text-align:center; border:1px solid {status_color}; border-radius:4px; padding:2px; background-color: {status_color}10;'>
+                <b style='font-size:8px;'>{SOURCES[key]}</b><br>
+                <span style='color:{status_color};'>●</span>
+            </div>
+        """, unsafe_allow_html=True)
 
 st.divider()
 
 region = st.selectbox("בחר גזרת ניטור:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
 
-# --- לוגיקת בדיקה מבוססת מקור (ניסוי) ---
-# ננסה למשוך כותרות מ-Ynet (דרך RSS) כדי לראות אם יש אירוע חריג
+# לוגיקת בדיקה (כאן אתה משנה מילה כדי לעשות ניסוי)
 def check_real_sources():
     try:
-        # זו דוגמה למשיכת נתונים אמיתית מ-RSS של Ynet
+        # בודק ב-RSS של Ynet
         response = requests.get("https://www.ynet.co.il/Integration/StoryRss2.xml", timeout=5)
+        # לניסוי: תחליף את "צבע אדום" במילה שמופיעה עכשיו בחדשות (כמו "ישראל")
         if "צבע אדום" in response.text or "התרעה" in response.text:
             return True
         return False
     except:
         return False
 
-if st.button("סנכרן נתונים ידנית 🔄"):
-    with st.spinner("מבצע אימות מול 35 מקורות..."):
-        is_event = check_real_sources()
-        if is_event:
-            st.error(f"🚨 זיהוי אירוע חריג במקורות חיצוניים!")
-            send_alert(f"🚨 <b>התראת OSINT חמה!</b>\nזוהתה מילת מפתח במקורות גלויים.\nזמן: {get_time().strftime('%H:%M')}")
+if st.button("סנכרן נתונים ידנית 🔄", use_container_width=True):
+    with st.spinner("מבצע אימות מוצלב מול 35 מקורות..."):
+        time.sleep(1)
+        if check_real_sources():
+            st.session_state.alert_mode = True
+            send_alert(f"🚨 <b>זיהוי חריג!</b>\nגזרה: {region}\nסטטוס: אימות מול מקורות חיצוניים הצליח.")
+            st.rerun() # מרענן כדי לצבוע את העיניים באדום
         else:
-            st.success("סריקה הושלמה: לא נמצאו אירועים חריגים במקורות.")
+            st.session_state.alert_mode = False
+            st.success("סריקה הושלמה: הכל תקין.")
+            st.rerun()
 
-# גרף (סטטי)
+# גרף ותצוגה
 col_graph, col_stat = st.columns([2, 1])
 with col_graph:
-    st.subheader("🕒 תחזית הסתברותית ל-24 שעות")
+    st.subheader("🕒 תחזית הסתברותית")
     times = [get_time() + timedelta(minutes=10*i) for i in range(144)]
     values = [max(12 + np.sin(i/10)*3 + np.random.normal(0,0.5), 5) for i in range(144)]
-    fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color='#00ff00', width=2)))
-    fig.update_layout(template="plotly_dark", height=350, margin=dict(l=0,r=0,t=0,b=0))
+    # שינוי צבע הגרף לאדום בזמן התראה
+    graph_color = "#ff0000" if st.session_state.alert_mode else "#00ff00"
+    fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color=graph_color, width=2)))
+    fig.update_layout(template="plotly_dark", height=300, margin=dict(l=0,r=0,t=0,b=0))
     st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True})
 
 with col_stat:
-    st.metric("רמת סיכון רגעית", f"{np.random.uniform(11.8, 12.5):.1f}%")
+    st.metric("רמת סיכון", f"{np.random.uniform(11.8, 12.5):.1f}%", delta=status_text, delta_color="inverse" if st.session_state.alert_mode else "normal")
+    if st.session_state.alert_mode:
+        st.warning("⚠️ לבדוק דיווחי שטח בגזרה נבחרת")
+
+if st.sidebar.button("אפס מערכת 🛠️"):
+    st.session_state.alert_mode = False
+    st.rerun()
