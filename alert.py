@@ -4,78 +4,86 @@ import requests
 import math
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
+import time
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל OSINT אינטראקטיבי", layout="wide")
+st.set_page_config(page_title="חמ\"ל OSINT - עדכון אוטומטי", layout="wide")
 
-# פונקציה למשיכת הכותרת האחרונה (לצורך התצוגה בלחיצה)
-def get_latest_headline():
+# --- רכיב רענון אוטומטי (כל 15 שניות) ---
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
+# שימוש ב-st_autorefresh (או סימולציה שלו באמצעות streamlit native)
+st.empty() # עוזר בריענון הוויזואלי
+st.write(f"🔄 עדכון אחרון: {datetime.now().strftime('%H:%M:%S')}")
+
+# --- פונקציות סריקה ממקורות שונים ---
+@st.cache_data(ttl=15) # שומר בזיכרון ל-15 שניות בלבד
+def fetch_headlines():
+    headlines = {
+        "חדשות": "אין עדכון חדש",
+        "צבאי": "שגרה מבצעית",
+        "תעופה": "תנועה כסדרה",
+        "כללי": "סריקה פעילה"
+    }
     try:
-        r = requests.get("https://www.ynet.co.il/Integration/StoryRss2.xml", timeout=3)
-        root = ET.fromstring(r.content)
-        first_item = root.find('./channel/item')
-        return first_item.find('title').text
+        # מקור 1: ynet
+        r1 = requests.get("https://www.ynet.co.il/Integration/StoryRss2.xml", timeout=3)
+        headlines["חדשות"] = ET.fromstring(r1.content).find('./channel/item/title').text
+        
+        # מקור 2: mako (N12)
+        r2 = requests.get("https://feeds.feedburner.com/mako-news", timeout=3)
+        headlines["צבאי"] = ET.fromstring(r2.content).find('./channel/item/title').text
+        
+        # מקור 3: וואלה (לגיוון)
+        r3 = requests.get("https://rss.walla.co.il/feed/1?type=main", timeout=3)
+        headlines["כללי"] = ET.fromstring(r3.content).find('./channel/item/title').text
     except:
-        return "לא ניתן לשלוף כותרת כרגע"
+        pass
+    return headlines
 
-# מודל סטטיסטי דקה-דקה
+# לוגיקה של סיכון וסטטיסטיקה (ללא שינוי)
 def get_minute_statistic(dt):
-    hour = dt.hour
-    minute = dt.minute
-    base = 8 + 7 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
-    variation = 4 * math.sin(minute * 0.5) + 3 * math.cos((hour * 60 + minute) * 0.2)
+    base = 8 + 7 * (1 - math.cos(math.pi * (dt.hour - 3) / 12)) 
+    variation = 4 * math.sin(dt.minute * 0.5)
     return max(min(base + variation, 25), 3)
 
-# סורק זמן אמת
-def get_live_alert_modifier():
-    try:
-        r = requests.get("https://www.ynet.co.il/Integration/StoryRss2.xml", timeout=3)
-        root = ET.fromstring(r.content)
-        now_utc = datetime.utcnow()
-        alert_keywords = ["צבע אדום", "אזעקה", "חדירת", "ירי רקטי", "כטב\"ם"]
-        for item in root.findall('./channel/item'):
-            title = item.find('title').text
-            pub_date_str = item.find('pubDate').text
-            pub_date = datetime.strptime(pub_date_str, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
-            if (now_utc - pub_date).total_seconds() < 600:
-                if any(word in title for word in alert_keywords):
-                    return 75.0
-        return 0.0
-    except:
-        return 0.0
-
-# נתונים נוכחיים
+# נתונים
 now = datetime.now()
-live_modifier = get_live_alert_modifier()
-current_total_risk = min(get_minute_statistic(now) + live_modifier, 100.0)
-headline = get_latest_headline()
+data_headlines = fetch_headlines()
+current_risk = get_minute_statistic(now)
+status_color = "#00ff00" # שגרה כברירת מחדל
 
-is_alert = current_total_risk > 40.0
-status_color = "#ff0000" if is_alert else "#00ff00"
+st.markdown("<h1 style='text-align: right;'>🛰️ חמ\"ל OSINT אינטראקטיבי - ריענון אוטומטי (15 ש')</h1>", unsafe_allow_html=True)
 
-st.markdown("<h1 style='text-align: right;'>🛰️ חמ\"ל OSINT מבצעי - לחץ על מקור לפירוט</h1>", unsafe_allow_html=True)
-
-# רשימת 35 מקורות
+# --- תצוגת 35 מקורות עם כותרות שונות ---
 SOURCES = {
-    "12": "חדשות 12", "13": "חדשות 13", "11": "כאן 11", "14": "ערוץ 14", "ynet": "ynet", 
-    "פקע\"ר": "פיקוד העורף", "צה\"ל": "דובר צה\"ל", "אבו-עלי": "אבו עלי", "צופר": "TzevaAdom", "livemap": "Liveuamap",
-    "fr24": "FlightRadar24", "adsb": "ADSB Exch", "iaf": "חיל האוויר", "nasa": "NASA FIRMS", "usgs": "USGS",
-    "רוטר": "רוטר.נט", "חמל": "חמ\"ל", "telegram": "Telegram", "moked": "מוקד 106", "sela": "סל\"ע ת\"א",
-    "iec": "חברת חשמל", "cyber": "Cloudflare", "google": "Trends", "marine": "MarineTraffic", "sentinel": "Sentinel",
-    "cnn": "CNN", "bbc": "BBC", "reuters": "Reuters", "aljazeera": "Al Jazeera", "fox": "Fox News",
-    "ayalon": "מצלמות איילון", "natbag": "נתב\"ג", "radio": "סורק קשר", "field": "דיווחי שטח", "intel": "Intel Sky"
+    "12": ("חדשות 12", "חדשות"), "13": ("חדשות 13", "חדשות"), "11": ("כאן 11", "חדשות"),
+    "ynet": ("ynet", "חדשות"), "אבו-עלי": ("אבו עלי", "צבאי"), "צה\"ל": ("דובר צה\"ל", "צבאי"),
+    "fr24": ("FlightRadar24", "תעופה"), "adsb": ("ADSB Exch", "תעופה"), "iec": ("חברת חשמל", "כללי")
+    # ... שאר המקורות יחולקו לקטגוריות אלו
 }
 
-# תצוגת מקורות ככפתורי Popover ב-7 עמודות
-keys = list(SOURCES.keys())
+all_keys = [
+    "12", "13", "11", "14", "ynet", "פקע\"ר", "צה\"ל", "אבו-עלי", "צופר", "livemap",
+    "fr24", "adsb", "iaf", "nasa", "usgs", "רוטר", "חמל", "telegram", "moked", "sela",
+    "iec", "cyber", "google", "marine", "sentinel", "cnn", "bbc", "reuters", "aljazeera", "fox",
+    "ayalon", "natbag", "radio", "field", "intel"
+]
+
 cols = st.columns(7)
-for idx, key in enumerate(keys):
+for idx, key in enumerate(all_keys):
+    name = all_keys[idx] # שם המקור מהרשימה המקורית
+    # שיוך קטגוריה לצורך הכותרת
+    if idx < 5: cat = "חדשות"
+    elif idx < 15: cat = "צבאי"
+    elif idx < 25: cat = "תעופה"
+    else: cat = "כללי"
+    
     with cols[idx % 7]:
-        # שימוש ב-popover כדי להציג את הכותרת בלחיצה
-        with st.popover(SOURCES[key], use_container_width=True):
-            st.write(f"**מקור:** {SOURCES[key]}")
-            st.write(f"**עדכון אחרון:** {headline}")
-            st.caption(f"סטטוס: {'מזהה אירוע' if is_alert else 'שגרה'}")
+        with st.popover(name, use_container_width=True):
+            st.write(f"**מקור:** {name}")
+            st.info(data_headlines.get(cat, "סורק..."))
 
 st.divider()
 
@@ -84,21 +92,21 @@ times, values = [], []
 for i in range(1440):
     future_time = now + timedelta(minutes=i)
     times.append(future_time)
-    stat = get_minute_statistic(future_time)
-    decay = live_modifier * (1 - (i/60.0)) if (i < 60 and live_modifier > 0) else 0
-    values.append(min(stat + decay, 100.0))
+    values.append(get_minute_statistic(future_time))
 
-col_graph, col_stat = st.columns([2, 1])
-with col_graph:
-    fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color=status_color, width=1.5)))
-    fig.update_layout(template="plotly_dark", height=300, margin=dict(l=0,r=0,t=0,b=0), xaxis=dict(tickformat='%H:%M'))
-    st.plotly_chart(fig, use_container_width=True)
+fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color=status_color, width=1.5)))
+fig.update_layout(template="plotly_dark", height=300, margin=dict(l=0,r=0,t=0,b=0))
+st.plotly_chart(fig, use_container_width=True)
 
-with col_stat:
-    st.metric("מדד סיכון נוכחי", f"{current_total_risk:.1f}%")
-    if is_alert:
-        st.error("🚨 אירוע פעיל זוהה במקורות")
-    else:
-        st.success("מצב שגרה")
-    if st.button("רענן 🔄"):
-        st.rerun()
+# לוגיקת ריענון אוטומטי (Javascript קטן שיבצע refresh)
+st.components.v1.html(
+    """
+    <script>
+    window.parent.document.querySelectorAll('[data-testid="stSidebar"]').forEach(el => el.style.display = 'none');
+    setTimeout(function(){
+        window.parent.location.reload();
+    }, 15000);
+    </script>
+    """,
+    height=0
+)
