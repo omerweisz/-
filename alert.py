@@ -1,99 +1,117 @@
 import streamlit as st
-from streamlit_folium import st_folium
-import folium
-from geopy.geocoders import Nominatim
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
+import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
+from datetime import datetime
 
-# הגדרות דף
-st.set_page_config(page_title="מערכת כוננות - 24 שעות", layout="wide")
+# הגדרות דף רחב
+st.set_page_config(page_title="מערכת מודיעין OSINT משולבת", layout="wide")
 
+def get_external_sources():
+    """מדמה סריקה של מקורות חיצוניים גלויים (OSINT) בזמן אמת"""
+    sources = {
+        "חדשות (N12/ynet)": np.random.choice(["תקין", "דיווח ראשוני על אירוע"], p=[0.8, 0.2]),
+        "סטטוס נתב\"ג": np.random.choice(["פתוח", "שינויי נתיבים/השהייה"], p=[0.9, 0.1]),
+        "עומסי תנועה (Waze)": np.random.choice(["שגרה", "חריג באזור המרכז"], p=[0.85, 0.15]),
+        "פיקוד העורף": np.random.choice(["שגרה", "אזעקות בדרום"], p=[0.75, 0.25]),
+        # פיצ'רים חדשים:
+        "חיפושי גוגל (Trends)": np.random.choice(["שגרה", "זינוק בחיפושי 'בום/אזעקה'"], p=[0.8, 0.2]),
+        "רשתות חברתיות/טלגרם": np.random.choice(["שגרה", "דיווחים לא מאומתים על שיגורים"], p=[0.7, 0.3])
+    }
+    return sources
 
-def get_location_name(lat, lon):
-    try:
-        geolocator = Nominatim(user_agent="security_monitor_24h")
-        location = geolocator.reverse((lat, lon), language='he')
-        address = location.raw.get('address', {})
-        return address.get('suburb') or address.get('city') or address.get('town') or "מיקום נבחר"
-    except:
-        return "אזור ניתוח"
-
-
-def write_heb(text, size="24px", color="white", bold=True):
-    st.markdown(
-        f'<p style="direction: rtl; text-align: right; font-size: {size}; font-weight: {"bold" if bold else "normal"}; color: {color}; font-family: Arial;">{text}</p>',
-        unsafe_allow_html=True)
-
-
-# --- ממשק ---
-write_heb("ניתוח סיכונים בליסטיים - תחזית 24 שעות (ברמת דקה)", size="34px", color="#ff3f34")
-
-col_map, col_graph = st.columns([1.3, 1])
-
-with col_map:
-    m = folium.Map(location=[32.0853, 34.7818], zoom_start=11, tiles="CartoDB dark_matter")
-    folium.LatLngPopup().add_to(m)
-    map_data = st_folium(m, height=600, width=750)
-
-with col_graph:
-    if map_data and map_data['last_clicked']:
-        lat = map_data['last_clicked']['lat']
-        lon = map_data['last_clicked']['lng']
-
-        with st.spinner("מחשב נתונים ל-1,440 הדקות הבאות..."):
-            place_name = get_location_name(lat, lon)
-
-        write_heb(f"תחזית יממתית עבור: {place_name}", color="#ff3f34")
-
-        # --- יצירת ציר זמן של 24 שעות (דקה אחר דקה) ---
-        now = datetime.now()
-        # 24 שעות * 60 דקות = 1440 נקודות
-        total_minutes = 24 * 60
-        time_points = [(now + timedelta(minutes=i)) for i in range(total_minutes)]
-        time_labels = [t.strftime("%H:%M") for t in time_points]
-
-        # יצירת נתונים עם תנודות טבעיות יותר (שימוש ב-Random Walk)
-        np.random.seed(int(lat * 1000))
-        steps = np.random.normal(0, 2, total_minutes)
-        risks = np.clip(np.cumsum(steps) + 40, 5, 95)
-
-        fig = go.Figure()
-
-        # הוספת הקו (בלי Markers כי יש יותר מדי נקודות)
-        fig.add_trace(go.Scatter(
-            x=time_labels,
-            y=risks,
-            mode='lines',
-            name='סיכון רגעי',
-            line=dict(color='#ff3f34', width=2, shape='spline'),
-            fill='tozeroy',
-            fillcolor='rgba(255, 63, 52, 0.1)',
-            hovertemplate='<b>זמן: %{x}</b><br>סיכון: %{y:.1f}%<extra></extra>'
-        ))
-
-        fig.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            height=450,
-            margin=dict(l=10, r=10, t=10, b=10),
-            xaxis=dict(
-                showgrid=False,
-                color="white",
-                title="ציר זמן (24 שעות)",
-                nticks=12  # מציג שעה כל שעתיים כדי שלא יהיה עמוס
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor="#333",
-                color="white",
-                range=[0, 100],
-                ticksuffix="%"
-            ),
-            hovermode="x unified"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-        write_heb("המערכת מציגה 1,440 נקודות נתונים בזמן אמת", size="14px", bold=False, color="#888888")
+def generate_ultra_pro_data(arena, sources):
+    times = pd.date_range(start=datetime.now(), periods=144, freq='10min')
+    
+    # חישוב בונוס סיכון מכל המקורות החיצוניים (6 מקורות)
+    external_bonus = 0
+    anomalies_count = 0
+    for status in sources.values():
+        if status not in ["תקין", "פתוח", "שגרה"]:
+            external_bonus += 12  # קצת פחות מ-15 כי יש יותר מקורות
+            anomalies_count += 1
+            
+    # בסיס הסתברות לפי זירה
+    if arena == "מתיחות בצפון (לבנון)":
+        base_risk = np.random.normal(20, 5, size=144) + external_bonus
+    elif arena == "התרעה אסטרטגית (איראן)":
+        base_risk = np.zeros(144)
+        base_risk[40:80] = 65 + external_bonus
     else:
-        st.info("בחר נקודה על המפה לניתוח 24 שעות")
+        base_risk = np.random.uniform(2, 8, size=144) + (external_bonus / 1.5)
+        
+    risk = np.clip(base_risk, 0, 100)
+    low = np.clip(risk - 10, 0, 100)
+    high = np.clip(risk + 10, 0, 100)
+    
+    # מדד אמינות מורכב המושפע מכמות החריגות
+    reliability = 98 - (anomalies_count * 3)
+    
+    return times, risk, low, high, reliability, anomalies_count
+
+st.title("🛰️ מערכת ניתוח הסתברותית מרובת מקורות (OSINT Pulse)")
+st.caption(f"העדכון האחרון בוצע ב: {datetime.now().strftime('%H:%M:%S')}")
+
+# חלק עליון: נורות בקרה (מעודכן ל-6 נורות)
+sources = get_external_sources()
+st.subheader("סטטוס מקורות מודיעין גלויים")
+cols = st.columns(6)
+for i, (name, status) in enumerate(sources.items()):
+    with cols[i]:
+        color = "green" if status in ["תקין", "פתוח", "שגרה"] else "red"
+        st.markdown(f"**{name}**")
+        st.markdown(f"● <span style='color:{color}; font-size:20px'>{status}</span>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# חלק מרכזי: גרף ותפריט
+col_side, col_main = st.columns([1, 3])
+
+with col_side:
+    st.subheader("הגדרות ניתוח")
+    arena = st.selectbox("זירה פעילה אקטיבית:", ["שגרה", "מתיחות בצפון (לבנון)", "התרעה אסטרטגית (איראן)"])
+    times, risk, low, high, acc, anomalies = generate_ultra_pro_data(arena, sources)
+    
+    st.metric("מדד אמינות תחזית משולב", f"{acc}%")
+    
+    if anomalies > 0:
+        st.warning(f"זוהו {anomalies} חריגות במקורות החיצוניים. ההסתברות עודכנה כלפי מעלה.")
+    else:
+        st.success("✅ כל המקורות החיצוניים מדווחים על שגרה.")
+
+with col_main:
+    # בניית הגרף המקצועי
+    fig = go.Figure()
+    # טווח טעות
+    fig.add_trace(go.Scatter(x=np.concatenate([times, times[::-1]]), y=np.concatenate([high, low[::-1]]),
+                             fill='toself', fillcolor='rgba(255, 75, 75, 0.1)', line=dict(color='rgba(255,255,255,0)'),
+                             name="טווח טעות סטטיסטי", showlegend=False))
+    # קו ראשי
+    fig.add_trace(go.Scatter(x=times, y=risk, mode='lines', line=dict(color='#ff4b4b', width=4), name="הסתברות משוקללת"))
+    
+    fig.update_layout(title=f"ניתוח סיכונים דינמי (24 שעות): {arena}",
+                      template="plotly_dark", height=450, margin=dict(l=20, r=20, t=40, b=20),
+                      yaxis=dict(range=[0, 100], title="אחוז הסתברות לאזעקה"), xaxis_title="ציר זמן")
+    st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+# פיצ'ר המפה הנפתחת (רק אם לוחצים)
+with st.expander("🗾 הצג מפת איומים דינמית (לחץ לפתיחה)", expanded=False):
+    st.write("מפה סימולטיבית המציגה את מוקדי הסיכון המרכזיים:")
+    
+    # יצירת מפה פשוטה המבוססת על מיקום המשתמש (תל אביב כברירת מחדל)
+    map_data = pd.DataFrame({
+        'lat': [32.085], # תל אביב
+        'lon': [34.78]
+    })
+    
+    # במצב מתיחות בצפון, המפה תתמקד בצפון
+    if arena == "מתיחות בצפון (לבנון)":
+        map_data = pd.DataFrame({
+            'lat': [32.8, 33.0, 32.9],
+            'lon': [34.9, 35.1, 35.3]
+        })
+    
+    st.map(map_data)
+    st.info("המפה מציגה עיגולים אדומים על אזורי הסיכון הנגזרים מהזירה הפעילה.")
