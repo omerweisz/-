@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - PRECISION V13", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - STRATEGIC V14", layout="wide")
 
 st.markdown("""
     <style>
@@ -21,34 +21,32 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def get_source_status(url, name):
-    critical_words = ["אזעקה", "חדירה", "נפילה", "יירוט", "מטח", "שיגור", "זיהוי", "פיצוץ", "ירי"]
-    pre_alert_words = ["התרעה", "דיווח ראשוני", "חשש", "תזוזה", "הכנה", "כוננות", "איראן"]
-    reset_words = ["חזרה לשגרה", "הסרת הגבלות", "אין נפגעים", "סוף האירוע"]
+    critical_words = ["אזעקה", "חדירה", "נפילה", "יירוט", "מטח", "שיגור", "זיהוי", "פיצוץ", "ירי", "טילים"]
+    pre_alert_words = ["התרעה", "דיווח ראשוני", "חשש", "תזוזה", "כוננות", "איראן"]
     target_zones = ["תל אביב", "גוש דן", "מרכז", "עבר הירקון", "גלילות", "רמת אביב", "חולון", "רמת גן", "בני ברק", "פתח תקווה"]
     
     now = datetime.now(timezone(timedelta(hours=2)))
     
     try:
-        response = requests.get(url, timeout=2)
+        response = requests.get(url, timeout=2.5)
         root = ET.fromstring(response.content)
-        items = root.findall('.//item')[:5]
+        items = root.findall('.//item')[:8]
         
         for item in items:
             title = item.find('title').text
             pub_date = parser.parse(item.find('pubDate').text)
-            diff_minutes = (now - pub_date).total_seconds() / 60
+            diff_min = (now - pub_date).total_seconds() / 60
             
-            # אם יש הודעת "חזרה לשגרה" ב-10 הדקות האחרונות
-            if any(rw in title for rw in reset_words) and 0 <= diff_minutes <= 10:
-                return "GREEN", title, pub_date
-
-            # בדיקה אם האירוע קרה ב-15 הדקות האחרונות
-            if 0 <= diff_minutes <= 15:
+            # בדיקה אם האירוע קרה ב-20 הדקות האחרונות (הגדלנו זמן)
+            if 0 <= diff_min <= 20:
                 if any(cw in title for cw in critical_words) and any(tz in title for tz in target_zones):
                     return "RED", title, pub_date
-                if any(pw in title for pw in pre_alert_words):
+                if any(pw in title for pw in pre_alert_words) or ("איראן" in title):
                     return "ORANGE_RED", title, pub_date
-                if any(cw in title for cw in critical_words) and any(loc in title for loc in ["השרון", "הרצליה", "נתניה"]):
+            
+            # נורה נשארת צבעונית ל-40 דקות כ"זיכרון" של המקור
+            if 0 <= diff_min <= 40:
+                if any(cw in title for cw in critical_words) and any(loc in title for loc in ["השרון", "מרכז"]):
                     return "ORANGE", title, pub_date
                     
         return "GREEN", "", None
@@ -91,27 +89,37 @@ def auto_refresh_hamaal():
     current_val = get_risk(now, global_status)
     main_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "ORANGE": "#ffaa00", "GREEN": "#00ff00"}[global_status]
 
+    # תצוגה
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {main_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {main_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold;">UNIT: EVER HAYARKON | PRECISION MONITOR</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold;">UNIT: EVER HAYARKON | STRATEGIC MONITOR V14</p>
             <h1 style="color: {main_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {main_color}88;">{current_val:.1f}%</h1>
-            <div style="color: #FFFFFF; font-size: 12px; font-family: 'JetBrains Mono'; opacity: 0.8;">
-                {f"זמן התרעה אחרונה: {last_event_time.strftime('%H:%M:%S')}" if last_event_time else "סטטוס: שגרה מבצעית"}
+            <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
+                <span style="color: {main_color};">●</span> {now.strftime('%H:%M:%S')} 
+                {f"<span style='color: #ffaa00; margin-left: 15px;'>LAST_ALERT: {last_event_time.strftime('%H:%M:%S')}</span>" if last_event_time else ""}
             </div>
         </div>
     """, unsafe_allow_html=True)
 
     if latest_msg:
-        st.markdown(f"""<div style="background: rgba(20,0,0,0.9); color: white; padding: 12px; margin: 15px 0; border-radius: 8px; border: 1px solid {main_color}; text-align: center; font-weight: bold;">⚠️ {latest_msg}</div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="background: rgba(30,0,0,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 2px solid {main_color}; text-align: center; font-weight: bold;">⚠️ {latest_msg}</div>""", unsafe_allow_html=True)
+
+    # החזרת הגרף
+    times = [now + timedelta(minutes=i) for i in range(1440)]
+    values = [get_risk(t, "GREEN") for t in times]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color="#333", width=2)))
+    fig.add_trace(go.Scatter(x=[now], y=[current_val], mode='markers', marker=dict(color=main_color, size=14, line=dict(color='white', width=2))))
+    fig.update_layout(margin=dict(l=0, r=0, t=5, b=0), height=140, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False), yaxis=dict(visible=False, range=[0, 115]), showlegend=False)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
     # נורות בקרה
     cols = st.columns(7)
     all_keys = ["YNET", "וואלה", "ישראל היום", "צופר", "פקע\"ר", "צה\"ל", "אבו-עלי", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
-    
     for idx, key in enumerate(all_keys):
         node_status = source_results.get(key, "GREEN")
         node_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "ORANGE": "#ffaa00", "GREEN": "#00ff00"}[node_status]
         with cols[idx % 7]:
-            st.markdown(f"""<div style="text-align: center; margin-bottom: 15px;"><div style="width: 8px; height: 8px; background: {node_color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px {node_color};"></div><br><span style="font-size:8px; color: #FFFFFF; font-weight: bold; opacity: 0.7;">{key}</span></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div style="text-align: center; margin-bottom: 12px;"><div style="width: 8px; height: 8px; background: {node_color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px {node_color};"></div><br><span style="font-size:8px; color: #FFFFFF; font-weight: bold; opacity: 0.7;">{key}</span></div>""", unsafe_allow_html=True)
 
 auto_refresh_hamaal()
