@@ -4,14 +4,15 @@ import requests
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
+from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - PRO", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V4", layout="wide")
 
 st.markdown("""
     <style>
     .main { background-color: #000000; }
-    div[data-testid="stVerticalBlock"] { gap: 0.2rem; }
+    div[data-testid="stVerticalBlock"] { gap: 0.1rem; }
     #MainMenu, footer, header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
@@ -22,28 +23,32 @@ def check_multi_source_osint():
         "https://rss.walla.co.il/feed/1?type=main",
         "https://www.israelhayom.co.il/rss.xml"
     ]
-    # החמרת מילות המפתח - רק אירוע חי באזורנו
-    critical_words = ["אזעקה", "חדירה", "נפילה", "יירוט", "מטח", "שיגור"]
+    critical_words = ["אזעקה", "חדירה", "נפילה", "יירוט", "מטח", "שיגור", "זיהוי"]
     local_targets = ["עבר הירקון", "רמת אביב", "צהלה", "נאות אפקה", "תל אביב", "גלילות", "הדר יוסף"]
     
-    combined_headlines = []
+    now = datetime.now(timedelta(hours=2)) # זמן ישראל
+    
     for url in sources:
         try:
             response = requests.get(url, timeout=2)
             root = ET.fromstring(response.content)
             for item in root.findall('.//item'):
                 title = item.find('title').text
-                if title: combined_headlines.append(title)
+                pub_date_str = item.find('pubDate').text
+                
+                # בדיקת זמן פרסום המבזק
+                pub_date = parser.parse(pub_date_str)
+                diff = (now.replace(tzinfo=None) - pub_date.replace(tzinfo=None)).total_seconds() / 60
+                
+                # אם המבזק חדש (מה-15 דקות האחרונות)
+                if diff <= 15:
+                    has_attack = any(word in title for word in critical_words)
+                    is_local = any(loc in title for loc in local_targets)
+                    is_active_iran = ("איראן" in title and any(w in title for w in ["מטח", "שיגור", "תקיפה"]))
+                    
+                    if (has_attack and is_local) or is_active_iran:
+                        return True, title
         except: continue
-
-    for title in combined_headlines[:20]:
-        # קופץ רק אם יש מילת התקפה קריטית וזה קשור אלינו או מטח איראני מוכח
-        has_attack = any(word in title for word in critical_words)
-        is_local = any(loc in title for loc in local_targets)
-        is_active_iran = ("איראן" in title and any(w in title for w in ["מטח", "שיגור", "תקיפה"]))
-        
-        if (has_attack and is_local) or is_active_iran:
-            return True, title
             
     return False, ""
 
@@ -55,27 +60,13 @@ def get_risk(dt, emergency_active):
 
 @st.fragment(run_every=30)
 def auto_refresh_hamaal():
-    now = datetime.utcnow() + timedelta(hours=2) 
+    now = datetime.now(timedelta(hours=2))
     
-    if 'alert_start_time' not in st.session_state: st.session_state.alert_start_time = None
-    if 'current_msg' not in st.session_state: st.session_state.current_msg = ""
-
-    is_emergency, raw_text = check_multi_source_osint()
-    
-    if raw_text != st.session_state.current_msg:
-        st.session_state.current_msg = raw_text
-        st.session_state.alert_start_time = now if raw_text else None
-
-    # מנקה התראות ישנות אחרי 10 דקות
-    display_text = raw_text
-    if st.session_state.alert_start_time:
-        if (now - st.session_state.alert_start_time).total_seconds() / 60 >= 10:
-            display_text = ""; is_emergency = False
-
+    is_emergency, display_text = check_multi_source_osint()
     current_val = get_risk(now, is_emergency)
     color = "#ff1a1a" if is_emergency else "#00ff00"
     
-    # תצוגה
+    # תצוגה עליונה
     st.markdown(f"""
         <div style="text-align: center; padding: 15px; border: 1px solid {color}33; border-radius: 10px; background: #000;">
             <p style="color: #444; font-size: 10px; margin: 0; letter-spacing: 2px;">SECTOR: EVER HAYARKON</p>
@@ -99,17 +90,11 @@ def auto_refresh_hamaal():
     ax.axis('off')
     st.pyplot(fig, clear_figure=True)
 
-    # החזרת 35 הנורות בדיוק כפי שהיו
+    # נורות (35)
     all_keys = ["12", "13", "11", "14", "YNET", "פקע\"ר", "צה\"ל", "אבו-עלי", "צופר", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
-    
     cols = st.columns(7)
     for idx, key in enumerate(all_keys):
         with cols[idx % 7]:
-            st.markdown(f"""
-                <div style="text-align: center; margin-bottom: 5px;">
-                    <div style="width: 5px; height: 5px; background: {color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px {color}77;"></div>
-                    <br><span style="font-size:7px; color: #222;">{key}</span>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""<div style="text-align: center; margin-bottom: 5px;"><div style="width: 5px; height: 5px; background: {color}; border-radius: 50%; display: inline-block;"></div><br><span style="font-size:7px; color: #333;">{key}</span></div>""", unsafe_allow_html=True)
 
 auto_refresh_hamaal()
