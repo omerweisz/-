@@ -1,6 +1,7 @@
 streamlit
-streamlit-folium
-folium
-geopy
 plotly
+requests
 numpy
+folium
+streamlit-folium
+geopy
