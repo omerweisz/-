@@ -25,9 +25,8 @@ def check_multi_source_osint():
         "https://www.israelhayom.co.il/rss.xml"
     ]
     critical_words = ["אזעקה", "חדירה", "נפילה", "יירוט", "מטח", "שיגור", "זיהוי", "נפץ"]
-    local_targets = ["עבר הירקון", "רמת אביב", "צהלה", "נאות אפקה", "תל אביב", "גלילות", "הדר יוסף"]
-    # הוספת לבנון וחיזבאללה לרשימת האיומים הישירים
-    strategic_threats = ["איראן", "לבנון", "חיזבאללה", "תימן", "חורתים"]
+    local_targets = ["עבר הירקון", "רמת אביב", "צהלה", "נאות אפקה", "תל אביב", "גלילות", "הדר יוסף", "המרכז", "גוש דן"]
+    strategic_threats = ["איראן", "לבנון", "חיזבאללה", "תימן"]
     
     now = datetime.now(timezone(timedelta(hours=2)))
     
@@ -44,9 +43,9 @@ def check_multi_source_osint():
                 if 0 <= diff <= 15:
                     has_attack = any(word in title for word in critical_words)
                     is_local = any(loc in title for loc in local_targets)
-                    # קפיצה אם יש איום אסטרטגי פעיל (שיגור/מטח/תקיפה נגדנו)
+                    # קפיצה רק אם מדובר בירי/תקיפה מהזירות האסטרטגיות לעברנו
                     is_strategic_attack = any(threat in title for threat in strategic_threats) and \
-                                         any(w in title for w in ["מטח", "שיגור", "תקיפה", "ירי", "לעבר"])
+                                         any(w in title for w in ["מטח", "שיגור", "תקיפה", "ירי", "לעבר המרכז", "לעבר ישראל"])
                     
                     if (has_attack and is_local) or is_strategic_attack:
                         return True, title
@@ -66,23 +65,23 @@ def auto_refresh_hamaal():
     current_val = get_risk(now, is_emergency)
     color = "#ff1a1a" if is_emergency else "#00ff00"
     
-    # תצוגה עליונה
+    # תצוגה עליונה - שים לב לסוגריים הכפולים ב-CSS למטה
     st.markdown(f"""
         <div style="text-align: center; padding: 15px; border: 1px solid {color}44; border-radius: 10px; background: #000;">
             <p style="color: #888; font-size: 11px; margin: 0; letter-spacing: 2px; font-weight: bold;">SECTOR: EVER HAYARKON</p>
             <h1 style="color: {color}; font-size: 60px; margin: 0; font-family: monospace;">{current_val:.1f}%</h1>
             <div style="color: white; font-size: 13px; font-family: monospace; font-weight: bold; margin-top: 5px;">
                 <span style="color: {color};">●</span> עדכון: {now.strftime('%H:%M:%S')} 
-                <span style="color: #0066ff; margin-left: 10px; animation: blinker 1s linear infinite;">● SCANNING</span>
+                <span style="color: #0066ff; margin-left: 10px; animation: blinker 1.5s linear infinite;">● SCANNING</span>
             </div>
         </div>
-        <style> @keyframes blinker { 50% { opacity: 0; } } </style>
+        <style> @keyframes blinker {{ 50% {{ opacity: 0; }} }} </style>
     """, unsafe_allow_html=True)
 
     if display_text:
         st.markdown(f"""<div style="background: #1a0000; color: white; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 12px; border: 1px solid {color}; text-align: center; font-weight: bold;">⚠️ {display_text}</div>""", unsafe_allow_html=True)
 
-    # גרף Plotly משופר - נראה "חי" גם באחוזים נמוכים
+    # גרף Plotly
     times = [now + timedelta(minutes=i*15) for i in range(40)]
     values = [get_risk(t, is_emergency) for t in times]
     fig = go.Figure()
@@ -95,7 +94,6 @@ def auto_refresh_hamaal():
         margin=dict(l=0, r=0, t=10, b=0), height=180,
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(visible=False, fixedrange=True),
-        # טווח דינמי כדי ש-15% יקבל נפח במסך
         yaxis=dict(visible=False, fixedrange=True, range=[0, 110 if is_emergency else 45]),
         showlegend=False, dragmode=False
     )
