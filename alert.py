@@ -1,13 +1,13 @@
 import streamlit as st
 import math
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - V4", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V4.1", layout="wide")
 
 st.markdown("""
     <style>
@@ -26,7 +26,8 @@ def check_multi_source_osint():
     critical_words = ["אזעקה", "חדירה", "נפילה", "יירוט", "מטח", "שיגור", "זיהוי"]
     local_targets = ["עבר הירקון", "רמת אביב", "צהלה", "נאות אפקה", "תל אביב", "גלילות", "הדר יוסף"]
     
-    now = datetime.now(timedelta(hours=2)) # זמן ישראל
+    # הגדרת זמן ישראל בצורה תקינה
+    now = datetime.now(timezone(timedelta(hours=2)))
     
     for url in sources:
         try:
@@ -38,10 +39,11 @@ def check_multi_source_osint():
                 
                 # בדיקת זמן פרסום המבזק
                 pub_date = parser.parse(pub_date_str)
-                diff = (now.replace(tzinfo=None) - pub_date.replace(tzinfo=None)).total_seconds() / 60
+                # השוואה בין זמנים עם אזורי זמן
+                diff = (now - pub_date).total_seconds() / 60
                 
                 # אם המבזק חדש (מה-15 דקות האחרונות)
-                if diff <= 15:
+                if 0 <= diff <= 15:
                     has_attack = any(word in title for word in critical_words)
                     is_local = any(loc in title for loc in local_targets)
                     is_active_iran = ("איראן" in title and any(w in title for w in ["מטח", "שיגור", "תקיפה"]))
@@ -60,7 +62,8 @@ def get_risk(dt, emergency_active):
 
 @st.fragment(run_every=30)
 def auto_refresh_hamaal():
-    now = datetime.now(timedelta(hours=2))
+    # תיקון השגיאה: שימוש ב-timezone
+    now = datetime.now(timezone(timedelta(hours=2)))
     
     is_emergency, display_text = check_multi_source_osint()
     current_val = get_risk(now, is_emergency)
@@ -80,6 +83,7 @@ def auto_refresh_hamaal():
 
     # גרף Matplotlib
     times = [i for i in range(50)]
+    # שימוש ב-now.replace כדי למנוע בעיות חישוב בגרף
     values = [get_risk(now + timedelta(minutes=i*20), is_emergency) for i in times]
     fig, ax = plt.subplots(figsize=(6, 1))
     fig.patch.set_facecolor('black')
