@@ -43,7 +43,6 @@ def check_multi_source_osint():
                 if 0 <= diff <= 15:
                     has_attack = any(word in title for word in critical_words)
                     is_local = any(loc in title for loc in local_targets)
-                    # קפיצה רק אם מדובר בירי/תקיפה מהזירות האסטרטגיות לעברנו
                     is_strategic_attack = any(threat in title for threat in strategic_threats) and \
                                          any(w in title for w in ["מטח", "שיגור", "תקיפה", "ירי", "לעבר המרכז", "לעבר ישראל"])
                     
@@ -54,18 +53,26 @@ def check_multi_source_osint():
 
 def get_risk(dt, emergency_active):
     if emergency_active: return 99.8
-    hour = dt.hour
+    hour = dt.hour + dt.minute / 60.0
     base = 10 + 5 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
     return max(min(base, 100), 4.2)
 
 @st.fragment(run_every=30)
 def auto_refresh_hamaal():
     now = datetime.now(timezone(timedelta(hours=2)))
+    
+    # ניהול היסטוריית התראות (Log)
+    if 'alert_log' not in st.session_state: st.session_state.alert_log = []
+
     is_emergency, display_text = check_multi_source_osint()
+    
+    if is_emergency and display_text not in [log['msg'] for log in st.session_state.alert_log]:
+        st.session_state.alert_log.insert(0, {'time': now.strftime('%H:%M'), 'msg': display_text})
+        st.session_state.alert_log = st.session_state.alert_log[:3] # שומר רק 3 אחרונים
+
     current_val = get_risk(now, is_emergency)
     color = "#ff1a1a" if is_emergency else "#00ff00"
     
-    # תצוגה עליונה - שים לב לסוגריים הכפולים ב-CSS למטה
     st.markdown(f"""
         <div style="text-align: center; padding: 15px; border: 1px solid {color}44; border-radius: 10px; background: #000;">
             <p style="color: #888; font-size: 11px; margin: 0; letter-spacing: 2px; font-weight: bold;">SECTOR: EVER HAYARKON</p>
@@ -81,17 +88,19 @@ def auto_refresh_hamaal():
     if display_text:
         st.markdown(f"""<div style="background: #1a0000; color: white; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 12px; border: 1px solid {color}; text-align: center; font-weight: bold;">⚠️ {display_text}</div>""", unsafe_allow_html=True)
 
-    # גרף Plotly
-    times = [now + timedelta(minutes=i*15) for i in range(40)]
+    # --- גרף 24 שעות דקה-דקה ---
+    # 1440 דקות = יממה שלמה
+    times = [now + timedelta(minutes=i) for i in range(1440)]
     values = [get_risk(t, is_emergency) for t in times]
+    
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=times, y=values, fill='tozeroy', 
-        line=dict(color=color, width=4),
-        fillcolor=f"rgba({255 if is_emergency else 0}, {255 if not is_emergency else 26}, 0, 0.12)"
+        line=dict(color=color, width=2),
+        fillcolor=f"rgba({255 if is_emergency else 0}, {255 if not is_emergency else 26}, 0, 0.1)"
     ))
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0), height=180,
+        margin=dict(l=0, r=0, t=5, b=0), height=150,
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(visible=False, fixedrange=True),
         yaxis=dict(visible=False, fixedrange=True, range=[0, 110 if is_emergency else 45]),
@@ -104,6 +113,12 @@ def auto_refresh_hamaal():
     cols = st.columns(7)
     for idx, key in enumerate(all_keys):
         with cols[idx % 7]:
-            st.markdown(f"""<div style="text-align: center; margin-bottom: 5px;"><div style="width: 6px; height: 6px; background: {color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px {color}aa;"></div><br><span style="font-size:8px; color: #666; font-weight: bold;">{key}</span></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div style="text-align: center; margin-bottom: 5px;"><div style="width: 5px; height: 5px; background: {color}; border-radius: 50%; display: inline-block;"></div><br><span style="font-size:7px; color: #444; font-weight: bold;">{key}</span></div>""", unsafe_allow_html=True)
+
+    # הצגת היסטוריית התראות בתחתית
+    if st.session_state.alert_log:
+        st.markdown("<hr style='border-color: #222;'>", unsafe_allow_html=True)
+        for entry in st.session_state.alert_log:
+            st.markdown(f"<p style='color: #666; font-size: 10px; margin: 0;'><b>[{entry['time']}]</b> {entry['msg']}</p>", unsafe_allow_html=True)
 
 auto_refresh_hamaal()
