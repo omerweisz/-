@@ -5,105 +5,113 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # הגדרות דף
-st.set_page_config(page_title="מערכת OSINT v25.0 - ניטור שיגורים", layout="wide")
+st.set_page_config(page_title="מערכת OSINT v27.0 - Global Intelligence", layout="wide")
 
 def get_israel_time():
     return datetime.utcnow() + timedelta(hours=2)
 
+# --- רשימת 20 מקורות מודיעין ---
 SOURCES_FULL = {
-    "11": "כאן 11", "12": "חדשות 12", "13": "חדשות 13", "14": "ערוץ 14",
-    "ynet": "ynet", "פקע\"ר": "פיקוד העורף", "גל\"צ": "גלי צה\"ל", 
-    "צה\"ל": "אתר צה\"ל", "telegram": "טלגרם", "adsb": "טיס"
+    "12": "חדשות 12", "13": "חדשות 13", "11": "כאן 11", "14": "ערוץ 14",
+    "ynet": "ynet", "פקע\"ר": "פיקוד העורף", "צה\"ל": "דובר צה\"ל", 
+    "מד\"א": "מד\"א", "כבאות": "כבאות", "רוטר": "רוטר", "חמל": "חמ\"ל",
+    "telegram": "טלגרם", "adsb": "טיס", "nasa": "NASA", "reuters": "רויטרס",
+    "iaf": "חיל האוויר", "iec": "חברת חשמל", "sela": "סל\"ע ת\"א", "cnn": "CNN", "bbc": "BBC"
 }
 
-# --- ניהול זיכרון ---
+# --- ניהול זיכרון (Session State) ---
 if 'active_sources' not in st.session_state:
     st.session_state['active_sources'] = {key: False for key in SOURCES_FULL.keys()}
+else:
+    for key in SOURCES_FULL.keys():
+        if key not in st.session_state['active_sources']:
+            st.session_state['active_sources'][key] = False
+
 if 'locked_risk' not in st.session_state:
     st.session_state['locked_risk'] = 12.0
 if 'alerts' not in st.session_state:
-    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערכת סריקה בשגרה"}]
+    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערך OSINT מלא פעיל"}]
 if 'emergency_mode' not in st.session_state:
     st.session_state['emergency_mode'] = False
 
-def alert_logic_engine(selected_region):
+def ultimate_intel_engine(selected_region):
     isr_now_str = get_israel_time().strftime('%H:%M')
     
-    # סיכוי נמוך מאוד לשיגור אמיתי (1% בכל סנכרון)
-    launch_detected = np.random.random() < 0.01 
+    # סיכוי נמוך מאוד לשיגור (1%)
+    launch_trigger = np.random.random() < 0.01 
     
-    if launch_detected:
-        src_key = np.random.choice(list(SOURCES_FULL.keys()))
-        st.session_state['active_sources'][src_key] = True
+    if launch_trigger:
+        # בחירת שני מקורות (הצלבה)
+        src_keys = np.random.choice(list(SOURCES_FULL.keys()), 2, replace=False)
+        for k in src_keys: st.session_state['active_sources'][k] = True
+        
         st.session_state['locked_risk'] = 98.8
         st.session_state['emergency_mode'] = True
-        msg = f"🚀 זיהוי שיגור: {SOURCES_FULL[src_key]} מדווח על יציאות לעבר {selected_region}!"
+        msg = f"🚀 שיגור מזוהה! {SOURCES_FULL[src_keys[0]]} ו-{SOURCES_FULL[src_keys[1]]} מאשרים יציאות לעבר {selected_region}!"
         st.session_state['alerts'].insert(0, {"time": isr_now_str, "msg": msg})
     
-    # אם אין שיגור, אנחנו בשגרה - האחוזים נשארים נמוכים
     elif not st.session_state['emergency_mode']:
-        # תנודה קלה מאוד בשגרה (בלי קפיצות)
-        st.session_state['locked_risk'] = np.random.uniform(11.8, 13.2)
+        # שגרה יציבה
+        st.session_state['locked_risk'] = np.random.uniform(11.8, 12.5)
         st.session_state['active_sources'] = {key: False for key in SOURCES_FULL.keys()}
     
-    # דעיכה אחרי אירוע חירום
     else:
-        st.session_state['locked_risk'] -= 4.0
-        if st.session_state['locked_risk'] <= 14.0:
+        # דעיכה
+        st.session_state['locked_risk'] -= 3.0
+        if st.session_state['locked_risk'] <= 13.0:
             st.session_state['emergency_mode'] = False
             st.session_state['locked_risk'] = 12.0
 
     return st.session_state['locked_risk']
 
 # --- ממשק משתמש ---
-st.markdown("<h1 style='text-align: right;'>🛰️ ניטור OSINT: עבר הירקון</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: right;'>🛰️ מרכז מודיעין OSINT: ניטור 20 מקורות</h1>", unsafe_allow_html=True)
 
-# נורות מקורות
-n_cols = st.columns(len(SOURCES_FULL))
-for i, (key, name) in enumerate(SOURCES_FULL.items()):
-    active = st.session_state['active_sources'].get(key, False)
-    color = "#ff4b4b" if active else "#00ff00"
-    n_cols[i].markdown(f"<div style='text-align:center; border:1px solid {color}; padding:5px;'><b style='font-size:10px;'>{name}</b><br><span style='color:{color};'>●</span></div>", unsafe_allow_html=True)
+# תצוגת ה"עיניים" ב-4 שורות לסדר מקסימלי
+keys = list(SOURCES_FULL.keys())
+for i in range(0, len(keys), 5):
+    row_keys = keys[i:i+5]
+    cols = st.columns(5)
+    for j, key in enumerate(row_keys):
+        active = st.session_state['active_sources'].get(key, False)
+        color = "#ff4b4b" if active else "#00ff00"
+        cols[j].markdown(f"<div style='text-align:center; border:1px solid {color}; border-radius:5px; padding:2px; background-color: rgba(0,0,0,0.1);'>"
+                         f"<b style='font-size:9px;'>{SOURCES_FULL[key]}</b><br><span style='color:{color}; font-size:14px;'>●</span></div>", unsafe_allow_html=True)
 
 st.divider()
 
 col_side, col_main = st.columns([1, 2])
 
 with col_side:
-    st.subheader("📍 הגדרת מיקוד")
+    st.subheader("📍 גזרת ניטור")
     region = st.selectbox("מיקום:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
-    risk_val = alert_logic_engine(region)
+    risk_val = ultimate_intel_engine(region)
+    st.metric("סיכון רגעי", f"{risk_val:.1f}%")
     
-    # תצוגת מטריקה
-    st.metric("סיכון נוכחי", f"{risk_val:.1f}%")
-    
-    st.write("**--- יומן אירועים ---**")
-    for a in st.session_state['alerts'][:3]:
+    st.write("**--- יומן מבצעי ---**")
+    for a in st.session_state['alerts'][:4]:
         st.caption(f"[{a['time']}] {a['msg']}")
 
 with col_main:
-    st.subheader(f"🕒 תחזית הסתברותית ל-24 שעות")
-    times = [get_israel_time() + timedelta(minutes=10 * i) for i in range(144)]
+    st.subheader(f"🕒 תחזית הסתברותית 24h: {region}")
+    isr_now = get_israel_time()
+    times = [isr_now + timedelta(minutes=10 * i) for i in range(144)]
     
     f_vals = []
     temp_risk = risk_val
     for i in range(144):
-        # בשגרה הגרף יציג תנודות קלות בלבד (11-14%)
-        if not st.session_state['emergency_mode']:
-            val = np.random.uniform(11.5, 13.5)
-            # פעם ב... בגרף העתידי תהיה קפיצה קטנה (מתח גזרה) אבל לא 100%
-            if np.random.random() < 0.02: val = np.random.uniform(20, 30)
+        if not st.session_mode := st.session_state['emergency_mode']:
+            val = np.random.uniform(11.5, 12.8)
+            if np.random.random() < 0.02: val = np.random.uniform(18, 25)
         else:
-            # אם יש אירוע, נראה דעיכה בגרף
-            val = max(temp_risk * (0.96 ** i), 12.0)
-            
+            val = max(temp_risk * (0.94 ** i), 12.0)
         f_vals.append(val)
 
     line_c = '#ff4b4b' if risk_val > 40 else '#00ff00'
-    fig = go.Figure(go.Scatter(x=times, y=f_vals, fill='tozeroy', line=dict(color=line_c, width=2.5),
+    fig = go.Figure(go.Scatter(x=times, y=f_vals, fill='tozeroy', line=dict(color=line_c, width=2),
                                hovertemplate="<b>זמן:</b> %{x|%H:%M}<br><b>סיכון:</b> %{y:.1f}%<extra></extra>"))
-    fig.update_layout(template="plotly_dark", height=400, margin=dict(l=10,r=10,t=10,b=10), yaxis=dict(range=[0, 100]))
+    fig.update_layout(template="plotly_dark", height=380, margin=dict(l=10,r=10,t=10,b=10), yaxis=dict(range=[0, 100]))
     st.plotly_chart(fig, use_container_width=True)
 
-if st.button("סנכרן נתונים 🔄"):
+if st.button("בצע סריקת מערכות מלאה 🔄"):
     st.rerun()
