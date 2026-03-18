@@ -2,32 +2,32 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import requests  # ספרייה חדשה לשליחת הודעות לאינטרנט
+import requests
 from datetime import datetime, timedelta
 
 # הגדרות דף
-st.set_page_config(page_title="מערכת OSINT v32.0 - Mobile Alerts", layout="wide")
+st.set_page_config(page_title="מערכת OSINT v33.0 - Stealth Mode", layout="wide")
 
-# --- הגדרות התראות לטלפון (IFTTT) ---
-# כאן תצטרך להזין את המפתח שתקבל מ-IFTTT
-IFTTT_KEY = "YOUR_IFTTT_KEY_HERE" 
+# --- הגדרות התראות שקטות ---
+IFTTT_KEY = "YOUR_IFTTT_KEY_HERE" # הדבק כאן את המפתח כשיהיה לך
 EVENT_NAME = "osint_alert"
 
-def send_phone_notification(risk_level, region):
-    if IFTTT_KEY == "YOUR_IFTTT_KEY_HERE":
-        return # לא שולח אם לא הגדרת מפתח
+def send_silent_notification(risk_level, region):
+    """שולח התראה לנייד ללא הצגת הודעות באתר"""
+    if not IFTTT_KEY or IFTTT_KEY == "YOUR_IFTTT_KEY_HERE":
+        return
     
     url = f"https://maker.ifttt.com/trigger/{EVENT_NAME}/with/key/{IFTTT_KEY}"
     data = {"value1": f"{risk_level:.1f}%", "value2": region}
     try:
-        requests.post(url, json=data, timeout=5)
+        requests.post(url, json=data, timeout=3)
     except:
-        pass # מונע קריסה אם אין אינטרנט
+        pass
 
 def get_israel_time():
     return datetime.utcnow() + timedelta(hours=2)
 
-# רשימת המקורות (35 מקורות)
+# רשימת 35 המקורות
 SOURCES_FULL = {
     "12": "חדשות 12", "13": "חדשות 13", "11": "כאן 11", "14": "ערוץ 14", "ynet": "ynet",
     "פקע\"ר": "פיקוד העורף", "צה\"ל": "דובר צה\"ל", "מד\"א": "מד\"א", "כבאות": "כבאות", "רוטר": "רוטר",
@@ -43,11 +43,11 @@ if 'active_sources' not in st.session_state:
 if 'locked_risk' not in st.session_state:
     st.session_state['locked_risk'] = 12.0
 if 'alerts' not in st.session_state:
-    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערכת התראות לנייד מוכנה"}]
+    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערכת ניטור פעילה"}]
 if 'emergency_mode' not in st.session_state:
     st.session_state['emergency_mode'] = False
 
-def alert_engine_with_mobile(selected_region):
+def core_engine(selected_region):
     isr_now_str = get_israel_time().strftime('%H:%M')
     launch_trigger = np.random.random() < 0.01 
     
@@ -57,27 +57,25 @@ def alert_engine_with_mobile(selected_region):
         st.session_state['locked_risk'] = 98.8
         st.session_state['emergency_mode'] = True
         
-        # --- שליחת ההתראה לנייד ---
-        send_phone_notification(98.8, selected_region)
+        # שליחה שקטה לנייד
+        send_silent_notification(98.8, selected_region)
         
-        msg = f"🚀 שיגור! התראה נשלחה לנייד. מקורות: {SOURCES_FULL[src_keys[0]]}, {SOURCES_FULL[src_keys[1]]}."
+        msg = f"🚀 זיהוי אירוע חריג! הצלבה מ-{len(src_keys)} מקורות לעבר {selected_region}."
         st.session_state['alerts'].insert(0, {"time": isr_now_str, "msg": msg})
-        
     elif not st.session_state['emergency_mode']:
-        st.session_state['locked_risk'] = np.random.uniform(12.0, 13.5)
+        st.session_state['locked_risk'] = np.random.uniform(12.0, 13.0)
         st.session_state['active_sources'] = {key: False for key in SOURCES_FULL.keys()}
     else:
         st.session_state['locked_risk'] -= 4.0
         if st.session_state['locked_risk'] <= 14.0:
             st.session_state['emergency_mode'] = False
-            st.session_state['locked_risk'] = 12.5
-            
+            st.session_state['locked_risk'] = 12.2
     return st.session_state['locked_risk']
 
-# --- ממשק משתמש ---
-st.markdown("<h1 style='text-align: right;'>🛰️ חמ\"ל OSINT: ניטור והתראות לנייד</h1>", unsafe_allow_html=True)
+# --- ממשק משתמש נקי ---
+st.markdown("<h1 style='text-align: right;'>🛰️ מרכז OSINT אחוד</h1>", unsafe_allow_html=True)
 
-# תצוגת נורות המקורות
+# נורות מקורות
 keys = list(SOURCES_FULL.keys())
 for i in range(0, len(keys), 5):
     cols = st.columns(5)
@@ -90,18 +88,12 @@ st.divider()
 col_side, col_main = st.columns([1, 2])
 
 with col_side:
-    st.subheader("📍 הגדרות")
-    region = st.selectbox("גזרה:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
-    risk_val = alert_engine_with_mobile(region)
+    st.subheader("📍 גזרה")
+    region = st.selectbox("מיקום ניטור:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
+    risk_val = core_engine(region)
     st.metric("סיכון רגעי", f"{risk_val:.1f}%")
     
-    # בדיקה ויזואלית אם המערכת מוכנה לשלוח הודעות
-    if IFTTT_KEY == "YOUR_IFTTT_KEY_HERE":
-        st.warning("⚠️ התראות לנייד לא פעילות: חסר מפתח IFTTT")
-    else:
-        st.success("📱 מערכת התראות לנייד מחוברת")
-
-    for a in st.session_state['alerts'][:3]:
+    for a in st.session_state['alerts'][:4]:
         st.caption(f"[{a['time']}] {a['msg']}")
 
 with col_main:
@@ -114,11 +106,11 @@ with col_main:
     for i in range(144):
         base = 12.0
         hour_factor = np.sin((times[i].hour / 24) * 2 * np.pi) * 2.0
-        noise = np.random.normal(0, 0.7)
+        noise = np.random.normal(0, 0.6)
         if is_emergency:
             val = max(risk_val * (0.95 ** i), base + hour_factor + noise)
         else:
-            spike = np.random.uniform(5, 12) if np.random.random() < 0.03 else 0
+            spike = np.random.uniform(5, 10) if np.random.random() < 0.03 else 0
             val = base + hour_factor + noise + spike
         f_vals.append(max(min(val, 100), 5))
 
@@ -127,5 +119,5 @@ with col_main:
     fig.update_layout(template="plotly_dark", height=400, margin=dict(l=10,r=10,t=10,b=10), yaxis=dict(range=[0, 100]))
     st.plotly_chart(fig, use_container_width=True)
 
-if st.button("סנכרן ובדוק סיכונים 🔄"):
+if st.button("סנכרן נתונים 🔄"):
     st.rerun()
