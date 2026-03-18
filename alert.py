@@ -7,15 +7,13 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - STRATEGIC V15", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V16 PRECISION", layout="wide")
 
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
     html, body, [data-testid="stAppViewContainer"] { background-color: #000; font-family: 'JetBrains Mono', monospace; color: white; }
     .stPlotlyChart { background-color: transparent !important; }
-    @keyframes blinker { 50% { opacity: 0.3; } }
-    .scanning-dot { animation: blinker 1.5s linear infinite; }
     #MainMenu, footer, header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
@@ -37,7 +35,10 @@ def get_source_status(url, name):
             pub_date = parser.parse(item.find('pubDate').text)
             diff_min = int((now - pub_date).total_seconds() / 60)
             
-            # הצגת זמן עבר בתוך הכותרת
+            # תנאי עצירה קשיח: מעל 20 דקות הכל חוזר לירוק
+            if diff_min > 20:
+                continue
+                
             time_tag = f"({diff_min} דק')"
             
             if 0 <= diff_min <= 20:
@@ -45,10 +46,6 @@ def get_source_status(url, name):
                     return "RED", f"{time_tag} {title}", pub_date
                 if any(pw in title for pw in pre_alert_words) or ("איראן" in title):
                     return "ORANGE_RED", f"{time_tag} {title}", pub_date
-            
-            if 0 <= diff_min <= 40:
-                if any(cw in title for cw in critical_words) and any(loc in title for loc in ["השרון", "מרכז"]):
-                    return "ORANGE", f"{time_tag} {title}", pub_date
                     
         return "GREEN", "", None
     except:
@@ -58,6 +55,7 @@ def get_risk(dt, global_status):
     if global_status == "RED": return 100.0
     if global_status == "ORANGE_RED": return 90.0
     if global_status == "ORANGE": return 65.0
+    # חישוב שגרה
     hour = dt.hour + dt.minute / 60.0
     base = 10 + 5 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
     return max(min(base, 100), 4.2)
@@ -80,29 +78,32 @@ def auto_refresh_hamaal():
     for name, url in sources_map.items():
         res, msg, p_date = get_source_status(url, name)
         source_results[name] = res
+        # סדר עדיפויות צבעים
         if res == "RED": global_status = "RED"
         elif res == "ORANGE_RED" and global_status != "RED": global_status = "ORANGE_RED"
-        elif res == "ORANGE" and global_status not in ["RED", "ORANGE_RED"]: global_status = "ORANGE"
+        
         if msg: 
             latest_msg = msg
             last_event_time = p_date
 
     current_val = get_risk(now, global_status)
-    main_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "ORANGE": "#ffaa00", "GREEN": "#00ff00"}[global_status]
+    main_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "GREEN": "#00ff00"}[global_status]
 
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {main_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {main_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold;">UNIT: EVER HAYARKON | V15 PRECISION</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | STRATEGIC V16</p>
             <h1 style="color: {main_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {main_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
                 <span style="color: {main_color};">●</span> {now.strftime('%H:%M:%S')} 
-                {f"<span style='color: #0066ff; margin-left: 15px;'>EVENT_LATCHED: {last_event_time.strftime('%H:%M:%S')}</span>" if last_event_time else ""}
+                {f"<span style='color: #0066ff; margin-left: 15px;'>SYNCED: {last_event_time.strftime('%H:%M:%S')}</span>" if last_event_time else ""}
             </div>
         </div>
     """, unsafe_allow_html=True)
 
     if latest_msg:
         st.markdown(f"""<div style="background: rgba(30,0,0,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 2px solid {main_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='height: 52px;'></div>", unsafe_allow_html=True) # שמירה על מרווח קבוע
 
     # גרף
     times = [now + timedelta(minutes=i) for i in range(1440)]
@@ -118,8 +119,8 @@ def auto_refresh_hamaal():
     all_keys = ["YNET", "וואלה", "ישראל היום", "צופר", "פקע\"ר", "צה\"ל", "אבו-עלי", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
     for idx, key in enumerate(all_keys):
         node_status = source_results.get(key, "GREEN")
-        node_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "ORANGE": "#ffaa00", "GREEN": "#00ff00"}[node_status]
+        node_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "GREEN": "#00ff00"}[node_status]
         with cols[idx % 7]:
-            st.markdown(f"""<div style="text-align: center; margin-bottom: 12px;"><div style="width: 8px; height: 8px; background: {node_color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px {node_color};"></div><br><span style="font-size:8px; color: #FFFFFF; font-weight: bold; opacity: 0.7;">{key}</span></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div style="text-align: center; margin-bottom: 12px;"><div style="width: 8px; height: 8px; background: {node_color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px {node_color};"></div><br><span style="font-size:8px; color: #FFFFFF; font-weight: bold; opacity: 0.6;">{key}</span></div>""", unsafe_allow_html=True)
 
 auto_refresh_hamaal()
