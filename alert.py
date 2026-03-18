@@ -47,11 +47,16 @@ if 'emergency_mode' not in st.session_state:
     st.session_state['emergency_mode'] = False
 
 def core_engine_v34(selected_region):
-    isr_now_str = get_israel_time().strftime('%H:%M')
-    # סיכוי של 1% להפעלת התראה בזמן לחיצה על סנכרון
-if True:
-        st.session_state['locked_risk'] = 98.8
-        st.session_state['emergency_mode'] = True
+# עדכון זמן סנכרון אחרון
+    st.session_state.last_sync = datetime.now().strftime("%H:%M:%S")
+    
+    # --- בדיקת טסט (שונה ל-True כדי שישלח הודעה תמיד) ---
+    if True:
+        send_telegram_message(f"🚨 התראת OSINT חמה! גזרה: {sector}")
+        st.error(f"🚨 זיהוי אירוע חריג בגזרת {sector}!")
+        st.toast("הודעה נשלחה לטלגרם!", icon="📲")
+    else:
+        st.success("הסנכרון הושלם: לא זוהו אירועים חריגים.")
         
         # הודעה מעוצבת לטלגרם
         msg_text = f"🚨 <b>התראת OSINT חריגה!</b>\nגזרה: {selected_region}\nרמת סיכון: 98.8%\nזמן: {isr_now_str}"
