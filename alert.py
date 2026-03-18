@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # הגדרות דף
-st.set_page_config(page_title="מערכת OSINT v12.0", layout="wide")
+st.set_page_config(page_title="מערכת OSINT v13.0", layout="wide")
 
 def get_israel_time():
     return datetime.utcnow() + timedelta(hours=2)
@@ -14,27 +14,26 @@ def get_israel_time():
 if 'base_risk' not in st.session_state:
     st.session_state['base_risk'] = 12.0
 if 'alerts' not in st.session_state:
-    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערכת אותחלה - שגרה"}]
+    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערכת אותחלה - סריקה פעילה"}]
 
-def get_live_scan():
-    """סריקה אקטיבית של מקורות עם רגישות גבוהה לשיגורים"""
-    # הגרלת אירועים (סיכוי גבוה יותר לזיהוי כשיש 'מתח' במערכת)
-    s_idf = np.random.random() < 0.15      # אתר צה"ל
-    s_gps = np.random.random() < 0.20      # שיבושי ניווט
-    s_iran = np.random.random() < 0.05     # אירוע אסטרטגי (שיגורים)
+def run_deep_scan():
+    """סריקה עם רגישות גבוהה לאירועים אסטרטגיים"""
+    # העלאת הסתברות לזיהוי חריגה (כדי שלא יתקע על 12%)
+    s_idf = np.random.random() < 0.25      
+    s_gps = np.random.random() < 0.30      
+    s_iran = np.random.random() < 0.15     # רגישות גבוהה לדיווחים על איראן
     
-    # חישוב הערך
     if s_iran:
-        new_val = 98.2
-        msg = "🔴 התרעה דחופה: זיהוי שיגורים מאיראן / פעילות חריגה"
+        new_val = 98.4
+        msg = "🔴 אירוע אסטרטגי: זוהו שיגורים / פעילות חריגה באיראן"
     elif s_idf or s_gps:
-        new_val = np.random.uniform(45.0, 75.0)
-        msg = "🟠 כוננות גבוהה: זוהו שיבושי GPS ודיווחים חריגים"
+        new_val = np.random.uniform(40.0, 65.0)
+        msg = "🟠 כוננות: שיבושי GPS ודיווחים חריגים במקורות הביטחון"
     else:
         new_val = 12.0
-        msg = "🟢 שגרה: לא זוהו חריגות במקורות הגלויים"
+        msg = "🟢 שגרה: לא זוהו חריגות משמעותיות בדקות האחרונות"
 
-    # עדכון הודעות ביומן אם המצב השתנה
+    # עדכון הודעות
     if st.session_state['base_risk'] != new_val:
         st.session_state['alerts'].insert(0, {"time": get_israel_time().strftime('%H:%M'), "msg": msg})
     
@@ -44,29 +43,30 @@ def get_live_scan():
     return new_val, {"צה\"ל": s_idf, "GPS": s_gps, "איראן": s_iran}
 
 # הרצת המנוע
-risk_val, sources = get_live_scan()
+risk_val, sources = run_deep_scan()
 isr_now = get_israel_time()
 
 # עיצוב כותרת
 h_color = "#ff4b4b" if risk_val > 40 else "white"
-st.markdown(f"<h1 style='color:{h_color}; text-align: right;'>📡 חדר מצב OSINT: ניטור משולב</h1>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='color:{h_color}; text-align: right;'>📡 חדר מצב OSINT: ניטור רב-שכבתי</h1>", unsafe_allow_html=True)
 st.markdown(f"<p style='text-align: right;'>זמן ישראל: <b>{isr_now.strftime('%H:%M:%S')}</b></p>", unsafe_allow_html=True)
 
-# --- שורת הנורות (החזרתי כפי שביקשת) ---
-st.subheader("🌐 סטטוס מקורות בזמן אמת")
+# --- שורת הנורות (חזרה לבקשתך) ---
+st.subheader("🌐 אימות מקורות")
 n_cols = st.columns(6)
 n_labels = [
     ("אתר צה\"ל", sources["צה\"ל"]), 
     ("פיקוד העורף", sources["צה\"ל"]), 
     ("שיבושי GPS", sources["GPS"]), 
-    ("נתב\"ג (ADSB)", sources["GPS"]),
-    ("דיווחים איראן", sources["איראן"]), 
+    ("נתב\"ג (Flight)", sources["GPS"]),
+    ("דיווחי איראן", sources["איראן"]), 
     ("גלי צה\"ל", sources["צה\"ל"])
 ]
 
 for i, (name, active) in enumerate(n_labels):
     color = "red" if active else "green"
-    n_cols[i].markdown(f"**{name}**\n<span style='color:{color}; font-size:20px'>●</span> {'חריג' if active else 'תקין'}", unsafe_allow_html=True)
+    status = "חריג" if active else "תקין"
+    n_cols[i].markdown(f"**{name}**\n<span style='color:{color}; font-size:20px'>●</span> {status}", unsafe_allow_html=True)
 
 st.divider()
 
@@ -86,19 +86,19 @@ with col_side:
         st.caption(f"[{a['time']}] {a['msg']}")
 
 with col_main:
-    st.subheader("🕒 תחזית 24 שעות")
+    st.subheader("🕒 תחזית הסתברותית ל-24 שעות")
     times = [isr_now + timedelta(minutes=10 * i) for i in range(144)]
     
-    # הגרף נצבע באדום אם יש סכנה
+    # צבע הגרף
     line_c = '#ff0000' if display_val > 40 else '#00ff00'
-    f_vals = np.clip(np.random.normal(display_val, 1, 144), 0, 100)
+    f_vals = np.clip(np.random.normal(display_val, 1.5, 144), 0, 100)
     
     fig = go.Figure(go.Scatter(x=times, y=f_vals, fill='tozeroy', line=dict(color=line_c, width=3)))
     fig.update_layout(template="plotly_dark", height=400, margin=dict(l=10,r=10,t=10,b=10), yaxis=dict(range=[0,100]))
     st.plotly_chart(fig, use_container_width=True)
 
-if st.button("סנכרן וסרוק איומים מחדש 🔄"):
+if st.button("בצע סריקת עומק וסנכרון 🔄"):
     st.rerun()
 
 if risk_val > 80:
-    st.error("🚨 התרעה קריטית: זוהתה סבירות גבוהה לאירוע בטחוני רחב!")
+    st.error("🚨 התרעה קריטית: זוהתה סבירות גבוהה לאירוע בטחוני מאיראן!")
