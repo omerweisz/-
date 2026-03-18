@@ -7,16 +7,38 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - ELITE", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - ELITE V5", layout="wide")
 
+# CSS מתקדם לאפקטים ויזואליים ומעברים
 st.markdown("""
     <style>
-    .stPlotlyChart { background-color: transparent !important; }
-    div[data-testid="stVerticalBlock"] { gap: 0.1rem; }
-    .main { background-color: #000000; }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+    
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #000000;
+        font-family: 'JetBrains+Mono', monospace;
+    }
+    
+    .stPlotlyChart { background-color: transparent !important; transition: all 1s ease; }
+    
+    /* אנימציית הבהוב לסריקה */
+    @keyframes blinker { 50% { opacity: 0.3; } }
+    .scanning-dot { animation: blinker 1.5s linear infinite; }
+    
+    /* מעברים חלקים לכל הממשק */
+    div, h1, p, span { transition: color 1s ease, border-color 1s ease, box-shadow 1s ease; }
+    
     #MainMenu, footer, header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
+
+def check_sources_health():
+    # בדיקה מהירה אם המקורות זמינים
+    try:
+        r = requests.get("https://www.ynet.co.il/Integration/StoryRss1854.xml", timeout=1)
+        return "OK" if r.status_code == 200 else "DB_ERR"
+    except:
+        return "OFFLINE"
 
 def check_multi_source_osint():
     sources = [
@@ -60,47 +82,40 @@ def get_risk(dt, emergency_active):
 @st.fragment(run_every=30)
 def auto_refresh_hamaal():
     now = datetime.now(timezone(timedelta(hours=2)))
-    
-    # ניהול היסטוריית התראות (Log)
-    if 'alert_log' not in st.session_state: st.session_state.alert_log = []
-
+    health_status = check_sources_health()
     is_emergency, display_text = check_multi_source_osint()
-    
-    if is_emergency and display_text not in [log['msg'] for log in st.session_state.alert_log]:
-        st.session_state.alert_log.insert(0, {'time': now.strftime('%H:%M'), 'msg': display_text})
-        st.session_state.alert_log = st.session_state.alert_log[:3] # שומר רק 3 אחרונים
-
     current_val = get_risk(now, is_emergency)
     color = "#ff1a1a" if is_emergency else "#00ff00"
-    
+    health_color = "#00ff00" if health_status == "OK" else "#ffaa00"
+
+    # תצוגה עליונה משופרת
     st.markdown(f"""
-        <div style="text-align: center; padding: 15px; border: 1px solid {color}44; border-radius: 10px; background: #000;">
-            <p style="color: #888; font-size: 11px; margin: 0; letter-spacing: 2px; font-weight: bold;">SECTOR: EVER HAYARKON</p>
-            <h1 style="color: {color}; font-size: 60px; margin: 0; font-family: monospace;">{current_val:.1f}%</h1>
-            <div style="color: white; font-size: 13px; font-family: monospace; font-weight: bold; margin-top: 5px;">
-                <span style="color: {color};">●</span> עדכון: {now.strftime('%H:%M:%S')} 
-                <span style="color: #0066ff; margin-left: 10px; animation: blinker 1.5s linear infinite;">● SCANNING</span>
+        <div style="text-align: center; padding: 20px; border: 1px solid {color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 20px {color}15;">
+            <p style="color: #666; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold;">UNIT: EVER HAYARKON | SECTOR 7</p>
+            <h1 style="color: {color}; font-size: 70px; margin: 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 15px {color}66;">{current_val:.1f}%</h1>
+            <div style="color: white; font-size: 12px; font-family: 'JetBrains Mono'; margin-top: 10px;">
+                <span style="color: {color};">●</span> {now.strftime('%H:%M:%S')} 
+                <span class="scanning-dot" style="color: #0066ff; margin-left: 15px;">● SCANNING</span>
+                <span style="color: {health_color}; margin-left: 15px; font-size: 10px;">[SYS_{health_status}]</span>
             </div>
         </div>
-        <style> @keyframes blinker {{ 50% {{ opacity: 0; }} }} </style>
     """, unsafe_allow_html=True)
 
     if display_text:
-        st.markdown(f"""<div style="background: #1a0000; color: white; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 12px; border: 1px solid {color}; text-align: center; font-weight: bold;">⚠️ {display_text}</div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="background: rgba(26,0,0,0.8); color: white; padding: 12px; margin: 15px 0; border-radius: 8px; font-size: 13px; border: 1px solid {color}; text-align: center; font-weight: bold; box-shadow: 0 0 10px {color}33;">⚠️ {display_text}</div>""", unsafe_allow_html=True)
 
-    # --- גרף 24 שעות דקה-דקה ---
-    # 1440 דקות = יממה שלמה
+    # גרף עם פס סריקה (Radar Line)
     times = [now + timedelta(minutes=i) for i in range(1440)]
     values = [get_risk(t, is_emergency) for t in times]
     
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=times, y=values, fill='tozeroy', 
-        line=dict(color=color, width=2),
-        fillcolor=f"rgba({255 if is_emergency else 0}, {255 if not is_emergency else 26}, 0, 0.1)"
-    ))
+    fig.add_trace(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color=color, width=3), fillcolor=f"rgba({255 if is_emergency else 0}, {255 if not is_emergency else 26}, 0, 0.1)"))
+    
+    # הוספת קו הסריקה (הזמן הנוכחי)
+    fig.add_vline(x=now, line_width=2, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+    
     fig.update_layout(
-        margin=dict(l=0, r=0, t=5, b=0), height=150,
+        margin=dict(l=0, r=0, t=5, b=0), height=160,
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(visible=False, fixedrange=True),
         yaxis=dict(visible=False, fixedrange=True, range=[0, 110 if is_emergency else 45]),
@@ -108,17 +123,16 @@ def auto_refresh_hamaal():
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-    # נורות (35)
+    # נורות (35) עם אפקט Glow
     all_keys = ["12", "13", "11", "14", "YNET", "פקע\"ר", "צה\"ל", "אבו-עלי", "צופר", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
     cols = st.columns(7)
     for idx, key in enumerate(all_keys):
         with cols[idx % 7]:
-            st.markdown(f"""<div style="text-align: center; margin-bottom: 5px;"><div style="width: 5px; height: 5px; background: {color}; border-radius: 50%; display: inline-block;"></div><br><span style="font-size:7px; color: #444; font-weight: bold;">{key}</span></div>""", unsafe_allow_html=True)
-
-    # הצגת היסטוריית התראות בתחתית
-    if st.session_state.alert_log:
-        st.markdown("<hr style='border-color: #222;'>", unsafe_allow_html=True)
-        for entry in st.session_state.alert_log:
-            st.markdown(f"<p style='color: #666; font-size: 10px; margin: 0;'><b>[{entry['time']}]</b> {entry['msg']}</p>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div style="text-align: center; margin-bottom: 10px;">
+                    <div style="width: 7px; height: 7px; background: {color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px {color}, 0 0 12px {color}88;"></div>
+                    <br><span style="font-size:8px; color: #555; font-weight: bold; text-transform: uppercase;">{key}</span>
+                </div>
+            """, unsafe_allow_html=True)
 
 auto_refresh_hamaal()
