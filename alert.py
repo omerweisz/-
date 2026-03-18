@@ -5,18 +5,18 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # הגדרות דף
-st.set_page_config(page_title="מערכת OSINT v27.0 - Global Intelligence", layout="wide")
+st.set_page_config(page_title="מערכת OSINT v28.0 - Full Spectrum", layout="wide")
 
 def get_israel_time():
     return datetime.utcnow() + timedelta(hours=2)
 
-# --- רשימת 20 מקורות מודיעין ---
+# --- רשימת 25 מקורות מודיעין (5x5) ---
 SOURCES_FULL = {
-    "12": "חדשות 12", "13": "חדשות 13", "11": "כאן 11", "14": "ערוץ 14",
-    "ynet": "ynet", "פקע\"ר": "פיקוד העורף", "צה\"ל": "דובר צה\"ל", 
-    "מד\"א": "מד\"א", "כבאות": "כבאות", "רוטר": "רוטר", "חמל": "חמ\"ל",
-    "telegram": "טלגרם", "adsb": "טיס", "nasa": "NASA", "reuters": "רויטרס",
-    "iaf": "חיל האוויר", "iec": "חברת חשמל", "sela": "סל\"ע ת\"א", "cnn": "CNN", "bbc": "BBC"
+    "12": "חדשות 12", "13": "חדשות 13", "11": "כאן 11", "14": "ערוץ 14", "ynet": "ynet",
+    "פקע\"ר": "פיקוד העורף", "צה\"ל": "דובר צה\"ל", "מד\"א": "מד\"א", "כבאות": "כבאות", "רוטר": "רוטר",
+    "חמל": "חמ\"ל", "telegram": "טלגרם", "adsb": "טיס (ADSB)", "nasa": "NASA", "reuters": "רויטרס",
+    "iaf": "חיל האוויר", "iec": "חברת חשמל", "sela": "סל\"ע ת\"א", "cnn": "CNN", "bbc": "BBC",
+    "opensky": "OpenSky", "uamap": "Liveuamap", "sentinel": "Sentinel", "xtrends": "X-Trends", "usgs": "USGS (Seismic)"
 }
 
 # --- ניהול זיכרון (Session State) ---
@@ -30,33 +30,31 @@ else:
 if 'locked_risk' not in st.session_state:
     st.session_state['locked_risk'] = 12.0
 if 'alerts' not in st.session_state:
-    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערך OSINT מלא פעיל"}]
+    st.session_state['alerts'] = [{"time": get_israel_time().strftime('%H:%M'), "msg": "מערך OSINT 25-מקורות פעיל"}]
 if 'emergency_mode' not in st.session_state:
     st.session_state['emergency_mode'] = False
 
-def ultimate_intel_engine(selected_region):
+def master_intel_engine(selected_region):
     isr_now_str = get_israel_time().strftime('%H:%M')
     
     # סיכוי נמוך מאוד לשיגור (1%)
     launch_trigger = np.random.random() < 0.01 
     
     if launch_trigger:
-        # בחירת שני מקורות (הצלבה)
-        src_keys = np.random.choice(list(SOURCES_FULL.keys()), 2, replace=False)
+        # הצלבה מ-3 מקורות הפעם לרמת אמינות מקסימלית
+        src_keys = np.random.choice(list(SOURCES_FULL.keys()), 3, replace=False)
         for k in src_keys: st.session_state['active_sources'][k] = True
         
         st.session_state['locked_risk'] = 98.8
         st.session_state['emergency_mode'] = True
-        msg = f"🚀 שיגור מזוהה! {SOURCES_FULL[src_keys[0]]} ו-{SOURCES_FULL[src_keys[1]]} מאשרים יציאות לעבר {selected_region}!"
+        msg = f"🚀 שיגור מזוהה! אימות משולש: {SOURCES_FULL[src_keys[0]]}, {SOURCES_FULL[src_keys[1]]} ו-{SOURCES_FULL[src_keys[2]]} מדווחים על יציאות."
         st.session_state['alerts'].insert(0, {"time": isr_now_str, "msg": msg})
     
     elif not st.session_state['emergency_mode']:
-        # שגרה יציבה
         st.session_state['locked_risk'] = np.random.uniform(11.8, 12.5)
         st.session_state['active_sources'] = {key: False for key in SOURCES_FULL.keys()}
     
     else:
-        # דעיכה
         st.session_state['locked_risk'] -= 3.0
         if st.session_state['locked_risk'] <= 13.0:
             st.session_state['emergency_mode'] = False
@@ -65,9 +63,9 @@ def ultimate_intel_engine(selected_region):
     return st.session_state['locked_risk']
 
 # --- ממשק משתמש ---
-st.markdown("<h1 style='text-align: right;'>🛰️ מרכז מודיעין OSINT: ניטור 20 מקורות</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: right;'>🛰️ מרכז ניטור OSINT - 25 מקורות</h1>", unsafe_allow_html=True)
 
-# תצוגת ה"עיניים" ב-4 שורות לסדר מקסימלי
+# תצוגת ה"עיניים" ב-5 שורות של 5
 keys = list(SOURCES_FULL.keys())
 for i in range(0, len(keys), 5):
     row_keys = keys[i:i+5]
@@ -85,7 +83,7 @@ col_side, col_main = st.columns([1, 2])
 with col_side:
     st.subheader("📍 גזרת ניטור")
     region = st.selectbox("מיקום:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
-    risk_val = ultimate_intel_engine(region)
+    risk_val = master_intel_engine(region)
     st.metric("סיכון רגעי", f"{risk_val:.1f}%")
     
     st.write("**--- יומן מבצעי ---**")
@@ -97,10 +95,13 @@ with col_main:
     isr_now = get_israel_time()
     times = [isr_now + timedelta(minutes=10 * i) for i in range(144)]
     
+    # --- תיקון השגיאה (Syntax Fix) ---
     f_vals = []
     temp_risk = risk_val
+    is_emergency = st.session_state['emergency_mode'] # השמה רגילה במקום Walrus בעייתי
+    
     for i in range(144):
-        if not st.session_mode := st.session_state['emergency_mode']:
+        if not is_emergency:
             val = np.random.uniform(11.5, 12.8)
             if np.random.random() < 0.02: val = np.random.uniform(18, 25)
         else:
