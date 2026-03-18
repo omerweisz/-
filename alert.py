@@ -35,11 +35,11 @@ if st.button("סנכרן נתונים ידנית 🔄"):
         # עדכון זמן סנכרון
         st.session_state.last_sync = datetime.now().strftime("%H:%M:%S")
         
-        # --- בדיקת טסט (שונה ל-True כדי שישלח הודעה תמיד) ---
-        if True:
+        # חזרה למצב ניטור אמיתי (סיכוי של 1% להתראה)
+        if np.random.random() < 0.01:
             send_telegram_message(f"🚨 התראת OSINT חמה! גזרה: {sector}")
             st.error(f"🚨 זיהוי אירוע חריג בגזרת {sector}!")
-            st.toast("הודעה נשלחה לטלגרם!", icon="📲")
+            st.toast("הודעה נשלחה לטלגרם!", icon="🚨")
         else:
             st.success("הסנכרון הושלם: לא זוהו אירועים חריגים.")
 
