@@ -5,8 +5,17 @@ import requests
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 
-# הגדרות דף - מותאם למובייל ולדסקטופ
+# הגדרות דף
 st.set_page_config(page_title="חמ\"ל עבר הירקון - LIVE", layout="wide")
+
+# CSS מיוחד כדי להעלים את הלבן בגרף ובדף בטלפון
+st.markdown("""
+    <style>
+    .stPlotlyChart { background-color: transparent !important; }
+    div[data-testid="stPlotlyChart"] { background-color: transparent !important; }
+    .main { background-color: #0a0a0a; }
+    </style>
+""", unsafe_allow_html=True)
 
 def check_multi_source_osint():
     sources = [
@@ -35,9 +44,9 @@ def check_multi_source_osint():
             return False, "✅ " + title
     
     for title in combined_headlines[:30]:
-        has_threat = any(word in title for word in threat_words)
-        is_local = any(loc in title for loc in local_targets)
-        if (has_threat and is_local) or "איראן" in title:
+        if any(word in title for word in threat_words) and any(loc in title for loc in local_targets):
+            return True, "⚠️ " + title
+        if "איראן" in title:
             return True, "⚠️ " + title
             
     return False, ""
@@ -72,36 +81,21 @@ def auto_refresh_hamaal():
     current_val = get_risk(now, is_emergency)
     is_red = (current_val > 35 and not ("✅" in alert_text))
     color = "#ff1a1a" if is_red else "#00ff00"
-    bg_color = "#1a0000" if is_red else "#0a0a0a" # רקע כהה מאוד למניעת ריבועים לבנים
     
-    st.markdown(f"<style>.stApp {{ background-color: {bg_color}; transition: 0.5s; }}</style>", unsafe_allow_html=True)
-
-    # תצוגה ראשית
+    # תצוגה עליונה נקייה
     st.markdown(f"""
-        <div style="text-align: center; padding: 25px; border: 2px solid {color}; border-radius: 15px; background: rgba(0,0,0,0.9); box-shadow: 0 0 20px {color}22;">
-            <p style="color: #888; font-size: 12px; margin: 0; letter-spacing: 2px; font-weight: bold;">SECTOR: EVER HAYARKON</p>
-            <h1 style="color: {color}; font-size: 75px; margin: 5px 0; font-family: monospace; text-shadow: 0 0 10px {color}55;">{current_val:.1f}%</h1>
-            <div style="color: {color}; font-size: 15px; font-weight: bold; font-family: monospace; opacity: 0.8;">
-                🕒 {now.strftime('%H:%M:%S')} :זמן עדכון
-            </div>
+        <div style="text-align: center; padding: 20px; border: 1px solid {color}44; border-radius: 10px; background: #000;">
+            <p style="color: #666; font-size: 10px; margin: 0; letter-spacing: 2px;">SECTOR: EVER HAYARKON</p>
+            <h1 style="color: {color}; font-size: 65px; margin: 5px 0; font-family: monospace;">{current_val:.1f}%</h1>
+            <p style="color: {color}aa; font-size: 12px; font-family: monospace;">🕒 {now.strftime('%H:%M:%S')}</p>
         </div>
     """, unsafe_allow_html=True)
 
     if show_box and alert_text:
-        box_color = "#003300" if "✅" in alert_text else "#440000"
-        st.markdown(f"""<div style="background: {box_color}; color: white; padding: 12px; margin: 15px 0; border-radius: 8px; font-size: 14px; font-weight: bold; border: 1px solid {color}; text-align: center;">{alert_text}</div>""", unsafe_allow_html=True)
-    
-    st.write("")
+        box_color = "#002200" if "✅" in alert_text else "#220000"
+        st.markdown(f"""<div style="background: {box_color}; color: white; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 13px; font-weight: bold; border: 1px solid {color}; text-align: center;">{alert_text}</div>""", unsafe_allow_html=True)
 
-    # נורות (35)
-    cols = st.columns(7)
-    all_keys = ["YNET", "WALLA", "N12", "HAYOM", "MAARIV", "צה\"ל", "צופר", "TELEGRAM", "ROTER", "MOKED", "SIRI", "MAPS", "FR24", "NASA", "CNN", "BBC", "FOX", "REUTERS", "IAF", "IEC", "CYBER", "GOOGLE", "INTEL", "NATBAG", "AYALON", "FIELD", "SURA", "OSINT", "RADIO", "SAT", "SENA", "ADSB", "FIRE", "POLICE", "MDA"]
-
-    for idx, key in enumerate(all_keys):
-        with cols[idx % 7]:
-            st.markdown(f"""<div style="text-align: center; border: 1px solid {color}11; border-radius: 5px; background: rgba(0,0,0,0.3); margin-bottom: 5px; padding: 4px;"><div style="width: 8px; height: 8px; background: {color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px {color}aa;"></div><br><b style="font-size:8px; color: #666;">{key}</b></div>""", unsafe_allow_html=True)
-
-    # --- הגרף המשופר לטלפון (המכ"ם הצבאי) ---
+    # --- הגרף האולטימטיבי למובייל ---
     times = [now + timedelta(minutes=i) for i in range(1440)]
     values = [get_risk(t, is_emergency) for t in times]
     
@@ -109,19 +103,28 @@ def auto_refresh_hamaal():
     fig.add_trace(go.Scatter(
         x=times, y=values, 
         fill='tozeroy', 
-        line=dict(color=color, width=3),
-        fillcolor=f"rgba({255 if is_red else 0}, {26 if is_red else 255}, 0, 0.15)"
+        line=dict(color=color, width=2),
+        fillcolor=f"rgba({255 if is_red else 0}, {26 if is_red else 255}, 0, 0.1)"
     ))
     
     fig.update_layout(
-        template="plotly_dark", height=180, 
-        margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor='rgba(0,0,0,0)', 
+        margin=dict(l=0, r=0, t=10, b=0),
+        height=150,
+        paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(visible=False, fixedrange=True), 
-        yaxis=dict(fixedrange=True, range=[0, 110], showgrid=False, zeroline=False, visible=False), 
+        xaxis=dict(visible=False, fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, 110]),
+        showlegend=False,
         dragmode=False
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+    # נורות (35) - קטנות יותר למובייל
+    cols = st.columns(7)
+    all_keys = ["YNET", "WALLA", "N12", "HAYOM", "MAARIV", "צה\"ל", "צופר", "TG", "ROTER", "MOKED", "SIRI", "MAPS", "FR24", "NASA", "CNN", "BBC", "FOX", "IAF", "IEC", "GOOGLE", "AYALON", "FIELD", "SURA", "OSINT", "RADIO", "SAT", "SENA", "ADSB", "FIRE", "POLICE", "MDA", "IDF", "ISR", "USA", "UK"]
+
+    for idx, key in enumerate(all_keys):
+        with cols[idx % 7]:
+            st.markdown(f"""<div style="text-align: center; margin-bottom: 5px;"><div style="width: 6px; height: 6px; background: {color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px {color}aa;"></div><br><span style="font-size:7px; color: #444;">{key}</span></div>""", unsafe_allow_html=True)
 
 auto_refresh_hamaal()
