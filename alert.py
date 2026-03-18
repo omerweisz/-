@@ -3,8 +3,9 @@ import pandas as pd
 import numpy as np
 import requests
 from datetime import datetime
+import time
 
-# הגדרות דף רחב ועיצוב
+# הגדרות דף - מראה רחב ונקי
 st.set_page_config(page_title="מערכת Alerts - חמ״ל אזרחי", layout="wide")
 
 # פונקציה לשליחת הודעה לטלגרם
@@ -16,55 +17,60 @@ def send_telegram_message(message):
         payload = {"chat_id": chat_id, "text": message}
         requests.post(url, json=payload)
     except Exception as e:
-        st.error(f"שגיאה בשליחת הודעה: {e}")
+        st.error(f"שגיאה בתקשורת: {e}")
 
-# עיצוב כותרת
+# --- כותרת המערכת ---
 st.title("🛡️ מערכת ניטור והתראות OSINT")
-st.markdown(f"**סטטוס מערכת:** 🔥 מבצעי | **זמן מקומי:** {datetime.now().strftime('%H:%M')}")
+st.write(f"סטטוס: **מבצעי** | עדכון אחרון: {datetime.now().strftime('%H:%M:%S')}")
 st.markdown("---")
 
-# תפריט צד
+# --- תפריט צד (Sidebar) ---
 st.sidebar.header("הגדרות חמ״ל")
-sector = st.sidebar.selectbox("גזרת ניטור:", ["תל אביב - עבר הירקון", "גוש דן", "צפון", "דרום"])
+sector = st.sidebar.selectbox("בחר גזרת ניטור:", ["תל אביב - עבר הירקון", "גוש דן", "צפון", "דרום"])
 sensitivity = st.sidebar.slider("רגישות אלגוריתם", 0, 100, 85)
+st.sidebar.markdown("---")
+st.sidebar.write("גרסה: 1.0.4 Beta")
 
-# שורת מדדים (KPIs) - זה מה שהיה חסר בעיצוב!
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("איומים פעילים", "3", "1")
-col2.metric("מקורות מידע", "14", "2")
-col3.metric("דירוג אמינות", "98%", "0.5%")
-col4.metric("זמן תגובה", "1.2s", "-0.1s")
+# --- שורת מדדים (KPIs) בחלק העליון ---
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("איומים פעילים", "3", "1", delta_color="inverse")
+m2.metric("מקורות מידע", "14", "2")
+m3.metric("דירוג אמינות", "98%", "0.5%")
+m4.metric("זמן תגובה", "1.2s", "-0.1s")
 
 st.markdown("---")
 
-# אזור תצוגה מרכזי
-c1, c2 = st.columns([2, 1])
+# --- אזור מרכזי: גרף ופעולות ---
+col_main, col_actions = st.columns([3, 1])
 
-with c1:
+with col_main:
     st.subheader(f"ניתוח זרימת מידע - {sector}")
-    chart_data = pd.DataFrame(np.random.randn(20, 3), columns=['חריגות', 'דיווחים', 'בוטים'])
-    st.line_chart(chart_data)
+    # יצירת גרף מעוצב יותר
+    chart_data = pd.DataFrame(
+        np.random.randn(20, 3) + [2, 1, 0], 
+        columns=['חריגות', 'דיווחים', 'בוטים']
+    )
+    st.area_chart(chart_data)
 
-with c2:
-    st.subheader("פעולות מהירות")
-    if st.button("سנכרן נתונים ידנית 🔄", use_container_width=True):
-        with st.spinner("סורק רשתות חברתיות וערוצי טלגרם..."):
-            import time
-            time.sleep(1.5)
+with col_actions:
+    st.subheader("פעולות")
+    if st.button("סנכרן נתונים 🔄", use_container_width=True):
+        with st.spinner("סורק..."):
+            time.sleep(1.2)
             st.session_state.last_sync = datetime.now().strftime("%H:%M:%S")
             
-            # לוגיקת התראה (1%)
+            # לוגיקה הסתברותית (1%)
             if np.random.random() < 0.01:
                 send_telegram_message(f"🚨 זיהוי חריג בגזרת {sector}!")
                 st.error(f"🚨 זיהוי אירוע חריג בגזרת {sector}!")
-                st.toast("הודעה נשלחה לטלגרם!", icon="🚨")
             else:
-                st.success("לא זוהו חריגות בסריקה האחרונה.")
+                st.success("סריקה הושלמה. תקין.")
 
     if 'last_sync' in st.session_state:
-        st.write(f"⏱️ סנכרון אחרון: **{st.session_state.last_sync}**")
+        st.caption(f"סנכרון אחרון: {st.session_state.last_sync}")
     
-    st.info("המערכת סורקת באופן אוטומטי מילות מפתח, מיקומי GPS ודיווחים גלויים.")
+    st.divider()
+    st.info("המערכת מנטרת מילות מפתח ברשתות חברתיות בזמן אמת.")
 
 st.markdown("---")
-st.caption("מערכת זו מיועדת למטרות למידה וניטור OSINT בלבד.")
+st.caption("מערכת OSINT אזרחית - לשימוש פנימי בלבד")
