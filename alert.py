@@ -24,7 +24,6 @@ def send_alert(msg):
     except: pass
 
 def get_time():
-    # זמן ישראל (UTC+2)
     return datetime.utcnow() + timedelta(hours=2)
 
 # רשימת 35 המקורות
@@ -38,21 +37,27 @@ SOURCES = {
     "natbag": "נתב\"ג", "fr24": "FlightRadar24", "radio": "סורק רדיו", "field": "דיווחי שטח", "intel": "Intel Sky"
 }
 
+# --- תפריט צד לשליטה על הטסט ---
+st.sidebar.header("⚙️ הגדרות מערכת")
+# הסליידר שביקשת - מאפשר לשנות את הסיכוי להתראה בזמן אמת
+test_chance = st.sidebar.slider("הסתברות להתראה (%)", 0, 100, 1)
+st.sidebar.info("כדי לעשות טסט: גרור ל-100% ולחץ על סנכרן. בזמן שגרה: השאר על 1%.")
+
 st.markdown("<h1 style='text-align: right;'>🛰️ מרכז OSINT מבצעי - 35 מקורות</h1>", unsafe_allow_html=True)
 
-# תצוגת ה"עיניים" (7 שורות של 5)
+# תצוגת ה"עיניים"
 keys = list(SOURCES.keys())
 for i in range(0, len(keys), 5):
     cols = st.columns(5)
     for j, key in enumerate(keys[i:i+5]):
-        cols[j].markdown(f"<div style='text-align:center; border:1px solid #00ff00; border-radius:4px; padding:2px;'><b style='font-size:10px;'>{SOURCES[key]}</b><br><span style='color:#00ff00;'>●</span></div>", unsafe_allow_html=True)
+        cols[j].markdown(f"<div style='text-align:center; border:1px solid #00ff00; border-radius:4px; padding:2px;'><b style='font-size:8px;'>{SOURCES[key]}</b><br><span style='color:#00ff00;'>●</span></div>", unsafe_allow_html=True)
 
 st.divider()
 
 region = st.selectbox("בחר גזרת ניטור:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
 
-# לוגיקה להדמיית התראה (1% סיכוי בכל טעינה/סנכרון)
-if np.random.random() < 0.01:
+# לוגיקה שמשתמשת בסליידר מהתפריט צד
+if np.random.random() < (test_chance / 100):
     st.error(f"🚨 זיהוי אירוע חריג בגזרת {region}!")
     send_alert(f"🚨 <b>התראת OSINT חמה!</b>\nגזרה: {region}\nזמן: {get_time().strftime('%H:%M')}\nסטטוס: אימות מול 35 מקורות.")
 
@@ -68,7 +73,6 @@ with col_graph:
 with col_stat:
     st.metric("רמת סיכון רגעית", f"{np.random.uniform(11.8, 12.5):.1f}%")
     st.write("**מערכת הניטור פועלת בענן 24/7**")
-    st.info(f"הגזרה הנבחרת: {region}")
 
 if st.button("סנכרן נתונים ידנית 🔄"):
     st.rerun()
