@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timedelta
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל OSINT - סנכרון אוטומטי", layout="wide")
+st.set_page_config(page_title="חמ\"ל OSINT - תצוגה קבועה", layout="wide")
 
 def get_risk(dt):
     hour = dt.hour
@@ -13,12 +13,10 @@ def get_risk(dt):
     variation = 4 * math.sin(minute * 0.5)
     return max(min(base + variation, 25), 3)
 
-# --- פונקציית הפרגמנט (מתעדכנת לבד כל 30 שניות) ---
 @st.fragment(run_every=30)
 def auto_refresh_hamaal():
     now = datetime.now()
     
-    # שעון חי למעלה
     st.markdown(f"""
         <div style='text-align: right;'>
             <h1 style='margin-bottom: 0;'>🛰️ חמ\"ל OSINT מבצעי</h1>
@@ -44,22 +42,25 @@ def auto_refresh_hamaal():
 
     st.divider()
 
-    # יצירת הגרף מעודכן לרגע הנוכחי
+    # יצירת הגרף
     times = [now + timedelta(minutes=i) for i in range(1440)]
     values = [get_risk(t) for t in times]
 
     fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color="#00ff00", width=1.5)))
+    
+    # --- כאן ביטלנו את הזום והגרירה ---
     fig.update_layout(
         template="plotly_dark", 
         height=300, 
         margin=dict(l=0,r=0,t=0,b=0),
-        xaxis=dict(tickformat='%H:%M', nticks=12)
+        xaxis=dict(tickformat='%H:%M', nticks=12, fixedrange=True), # ביטול זום ב-X
+        yaxis=dict(fixedrange=True, range=[0, 35]),                 # ביטול זום ב-Y
+        dragmode=False                                              # ביטול אפשרות גרירה
     )
 
+    # config={'displayModeBar': False} מעלים את סרגל הכלים של פלוטלי למעלה
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     
-    # מדד סיכון נוכחי
     st.metric("רמת סיכון נוכחית", f"{get_risk(now):.1f}%")
 
-# הפעלת הפונקציה
 auto_refresh_hamaal()
