@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 import xml.etree.ElementTree as ET
 from dateutil import parser
 
-# הגדרות דף - חמ"ל מבצעי חכם
-st.set_page_config(page_title="חמ\"ל עבר הירקון - V17 SMART RESET", layout="wide")
+# הגדרות דף
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V18 CLASSIC", layout="wide")
 
 st.markdown("""
     <style>
@@ -35,11 +35,9 @@ def get_source_status(url, name):
             pub_date = parser.parse(item.find('pubDate').text)
             diff_min = int((now - pub_date).total_seconds() / 60)
             
-            # 1. בדיקת הודעת שחרור (עדיפות עליונה)
             if any(rw in title for rw in release_words) and 0 <= diff_min <= 10:
                 return "RELEASE", f"({diff_min} דק') {title}", pub_date
 
-            # 2. בדיקת אזעקה (רק אם בתוך חלון ה-20 דקות)
             if 0 <= diff_min <= 20:
                 if any(cw in title for cw in critical_words) and any(tz in title for tz in target_zones):
                     return "RED", f"({diff_min} דק') {title}", pub_date
@@ -53,7 +51,7 @@ def get_source_status(url, name):
 def get_risk(dt, global_status):
     if global_status == "RED": return 100.0
     if global_status == "ORANGE_RED": return 90.0
-    if global_status == "RELEASE": return 15.0 # ירידה מיידית לכמעט שגרה
+    if global_status == "RELEASE": return 15.0
     
     hour = dt.hour + dt.minute / 60.0
     base = 10 + 5 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
@@ -77,17 +75,14 @@ def auto_refresh_hamaal():
     for name, url in sources_map.items():
         res, msg, p_date = get_source_status(url, name)
         source_results[name] = res
-        
-        # לוגיקת הכרעה: הודעת שחרור מבטלת הכל
         if res == "RELEASE":
             global_status = "RELEASE"
             latest_msg = msg
-            break # מצאנו הודעת הרגעה, אפשר לעצור
+            break
         elif res == "RED":
             global_status = "RED"
         elif res == "ORANGE_RED" and global_status != "RED":
             global_status = "ORANGE_RED"
-            
         if msg: 
             latest_msg = msg
             last_event_time = p_date
@@ -95,28 +90,38 @@ def auto_refresh_hamaal():
     current_val = get_risk(now, global_status)
     main_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "RELEASE": "#00ff00", "GREEN": "#00ff00"}[global_status]
 
-    # תצוגה
+    # תצוגה ראשית
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {main_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {main_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | V17 PRECISION</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | STRATEGIC V18</p>
             <h1 style="color: {main_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {main_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
                 <span style="color: {main_color};">●</span> {now.strftime('%H:%M:%S')} 
-                {f"<span style='color: #00ff00; margin-left: 15px;'>● RESOLVED</span>" if global_status == "RELEASE" else ""}
+                {f"<span style='color: #00ff00; margin-left: 15px;'>● RESET_RECEIVED</span>" if global_status == "RELEASE" else ""}
             </div>
         </div>
     """, unsafe_allow_html=True)
 
     if latest_msg:
-        st.markdown(f"""<div style="background: rgba(30,30,30,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 2px solid {main_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="background: rgba(20,20,20,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 1px solid {main_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='height: 62px;'></div>", unsafe_allow_html=True)
 
-    # גרף
-    fig = go.Figure()
-    times = [now + timedelta(minutes=i) for i in range(1440)]
+    # גרף עם נקודת "עכבר" מסונכרנת
+    times = [now + timedelta(minutes=i-120) for i in range(240)] # מציג חלון זמן רחב
     values = [get_risk(t, "GREEN") for t in times]
-    fig.add_trace(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color="#333", width=2)))
-    fig.add_trace(go.Scatter(x=[now], y=[current_val], mode='markers', marker=dict(color=main_color, size=14, line=dict(color='white', width=2))))
-    fig.update_layout(margin=dict(l=0, r=0, t=5, b=0), height=140, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False), yaxis=dict(visible=False, range=[0, 115]), showlegend=False)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color="#222", width=2), hoverinfo='skip'))
+    # נקודת ה"עכבר" - תמיד על הזמן הנוכחי והערך הנוכחי
+    fig.add_trace(go.Scatter(x=[now], y=[current_val], mode='markers+text', 
+                             marker=dict(color=main_color, size=15, line=dict(color='white', width=2)),
+                             text=[f"{current_val:.1f}%"], textposition="top center",
+                             textfont=dict(color=main_color, size=12)))
+    
+    fig.update_layout(margin=dict(l=0, r=0, t=20, b=0), height=160, paper_bgcolor='rgba(0,0,0,0)', 
+                      plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False), 
+                      yaxis=dict(visible=False, range=[0, 120]), showlegend=False)
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
     # נורות
