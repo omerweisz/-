@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - MULTI-LAYER", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - INTERACTIVE", layout="wide")
 
 st.markdown("""
     <style>
@@ -27,12 +27,8 @@ def check_multi_source_osint():
         "https://www.israelhayom.co.il/rss.xml"
     ]
     critical_words = ["אזעקה", "חדירה", "נפילה", "יירוט", "מטח", "שיגור", "זיהוי", "פיצוץ"]
-    
-    # מעגל 1: פגיעה ישירה בבית
     core_targets = ["עבר הירקון", "רמת אביב", "צהלה", "נאות אפקה", "תל אביב", "גלילות", "הדר יוסף"]
-    # מעגל 2: סביבה קרובה (השרון והמרכז הכללי)
     perimeter_targets = ["השרון", "מרכז", "גוש דן", "הרצליה", "רעננה", "נתניה", "כפר סבא", "פתח תקווה", "חולון", "ראשון לציון"]
-    
     strategic_threats = ["איראן", "לבנון", "חיזבאללה", "תימן"]
     now = datetime.now(timezone(timedelta(hours=2)))
     
@@ -47,21 +43,14 @@ def check_multi_source_osint():
                 title = item.find('title').text
                 pub_date = parser.parse(item.find('pubDate').text)
                 if 0 <= (now - pub_date).total_seconds() / 60 <= 15:
-                    
-                    # בדיקת מעגל 1 (אדום)
                     if any(word in title for word in critical_words) and any(loc in title for loc in core_targets):
                         return "RED_ALERT", title
-                    
-                    # בדיקת איום אסטרטגי (אדום)
                     if any(threat in title for threat in strategic_threats) and any(w in title for w in ["מטח", "שיגור", "תקיפה"]):
                         return "RED_ALERT", title
-
-                    # בדיקת מעגל 2 (כתום - השרון/מרכז)
                     if any(word in title for word in critical_words) and any(loc in title for loc in perimeter_targets):
                         status = "ORANGE_WARNING"
                         alert_msg = title
         except: continue
-    
     return status, alert_msg
 
 def get_risk(dt, status):
@@ -76,17 +65,12 @@ def auto_refresh_hamaal():
     now = datetime.now(timezone(timedelta(hours=2)))
     status, display_text = check_multi_source_osint()
     current_val = get_risk(now, status)
-    
-    # בחירת צבע לפי סטטוס
-    if status == "RED_ALERT": color = "#ff1a1a"
-    elif status == "ORANGE_WARNING": color = "#ffaa00"
-    else: color = "#00ff00"
+    color = "#ff1a1a" if status == "RED_ALERT" else "#ffaa00" if status == "ORANGE_WARNING" else "#00ff00"
 
-    # תצוגה
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 20px {color}15;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold;">UNIT: EVER HAYARKON | MULTI-LAYER DEFENSE</p>
-            <h1 style="color: {color}; font-size: 75px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 15px {color}66;">{current_val:.1f}%</h1>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.9;">UNIT: EVER HAYARKON | MULTI-LAYER</p>
+            <h1 style="color: {color}; font-size: 75px; margin: 5px 0; font-family: 'JetBrains Mono';">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono'; font-weight: bold;">
                 <span style="color: {color};">●</span> {now.strftime('%H:%M:%S')} 
                 <span class="scanning-dot" style="color: #0066ff; margin-left: 15px;">● RADAR_ACTIVE</span>
@@ -96,14 +80,37 @@ def auto_refresh_hamaal():
 
     if display_text:
         label = "סכנה מיידית" if status == "RED_ALERT" else "פעילות בגזרה שכנה"
-        st.markdown(f"""<div style="background: rgba(26,15,0,0.9) if status=='ORANGE_WARNING' else rgba(26,0,0,0.9); color: white; padding: 12px; margin: 15px 0; border-radius: 8px; font-size: 14px; border: 1px solid {color}; text-align: center; font-weight: bold;"><b>[{label}]</b> ⚠️ {display_text}</div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="background: rgba(26,0,0,0.9); color: white; padding: 12px; margin: 15px 0; border-radius: 8px; font-size: 14px; border: 1px solid {color}; text-align: center; font-weight: bold;">⚠️ {display_text}</div>""", unsafe_allow_html=True)
 
-    # גרף
+    # --- גרף עם Hover פעיל וזום מבוטל ---
     times = [now + timedelta(minutes=i) for i in range(1440)]
     values = [get_risk(t, status) for t in times]
+    
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color=color, width=3), fillcolor=f"rgba({255 if status!='QUIET' else 0}, {170 if status=='ORANGE_WARNING' else 255}, 0, 0.1)"))
-    fig.update_layout(margin=dict(l=0, r=0, t=5, b=0), height=150, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False), yaxis=dict(visible=False, range=[0, 110]))
+    fig.add_trace(go.Scatter(
+        x=times, 
+        y=values, 
+        fill='tozeroy', 
+        line=dict(color=color, width=3),
+        fillcolor=f"rgba({255 if status!='QUIET' else 0}, {170 if status=='ORANGE_WARNING' else 255}, 0, 0.1)",
+        name="רמת סיכון",
+        hovertemplate='%{y:.1f}%<extra></extra>' # מציג רק אחוזים ב-Hover
+    ))
+    
+    fig.add_vline(x=now, line_width=2, line_dash="solid", line_color="rgba(255,255,255,0.5)")
+    
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=5, b=0), height=180,
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(visible=False, fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True, range=[0, 110]),
+        showlegend=False,
+        dragmode=False, # מבטל זום וגרירה
+        hovermode='x unified', # מציג נתונים בצורה נקייה על ציר ה-X
+        hoverlabel=dict(bgcolor="black", font_size=12, font_family="JetBrains Mono", font_color="white")
+    )
+    
+    # הצגת הגרף ללא כפתורי הכלים של Plotly (displayModeBar: False)
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
     # נורות
