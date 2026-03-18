@@ -6,14 +6,15 @@ import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - LIVE", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V3", layout="wide")
 
-# CSS להעלמת הלבן ועיצוב שחור נקי
+# CSS לעיצוב שחור נקי והעלמת שוליים
 st.markdown("""
     <style>
     .main { background-color: #000000; }
-    div[data-testid="stVerticalBlock"] { gap: 0.5rem; }
+    div[data-testid="stVerticalBlock"] { gap: 0.3rem; }
     iframe { border: none !important; }
+    #MainMenu, footer, header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -21,10 +22,12 @@ def check_multi_source_osint():
     sources = [
         "https://www.ynet.co.il/Integration/StoryRss1854.xml",
         "https://rss.walla.co.il/feed/1?type=main",
-        "https://www.israelhayom.co.il/rss.xml"
+        "https://www.israelhayom.co.il/rss.xml",
+        "https://m.maariv.co.il/Rss/RssFeeds0"
     ]
-    threat_words = ["טילים", "כטב\"מ", "יירוט", "נפילה", "אזעקה", "פיצוץ", "חדירה"]
-    local_targets = ["עבר הירקון", "רמת אביב", "צהלה", "נאות אפקה", "תל אביב", "גלילות", "פי גלילות"]
+    # מילים שמעידות על תקיפה נגדנו (לא תקיפה של צה"ל שם)
+    attack_words = ["שיגור", "מטח", "ירי", "כטב\"ם", "אזעקה", "חדירה", "נפילה", "יירוט"]
+    local_targets = ["עבר הירקון", "רמת אביב", "צהלה", "נאות אפקה", "תל אביב", "גלילות", "פי גלילות", "הדר יוסף"]
     end_words = ["חזרה לשגרה", "הוסרה ההתרעה", "סיום האירוע", "האירוע הסתיים", "ניתן לצאת"]
     
     combined_headlines = []
@@ -37,12 +40,20 @@ def check_multi_source_osint():
                 if title: combined_headlines.append(title)
         except: continue
 
+    # בדיקת הרגעה
     for title in combined_headlines[:10]:
         if any(word in title for word in end_words): return False, title
-    for title in combined_headlines[:25]:
-        if any(word in title for word in threat_words) and any(loc in title for loc in local_targets):
+    
+    # לוגיקה חדשה: קופץ רק אם יש איום עלינו (מילת תקיפה + יעד מקומי/איראן)
+    for title in combined_headlines[:30]:
+        has_attack = any(word in title for word in attack_words)
+        is_local = any(loc in title for loc in local_targets)
+        # קופץ רק אם איראן מבצעת ירי/שיגור, לא אם צה"ל תוקף שם
+        is_iran_attack = ("איראן" in title and any(w in title for w in ["שיגר", "מטח", "לעבר ישראל", "תקיפה נגד"]))
+        
+        if (has_attack and is_local) or is_iran_attack:
             return True, title
-        if "איראן" in title: return True, title
+            
     return False, ""
 
 def get_risk(dt, emergency_active):
@@ -72,38 +83,43 @@ def auto_refresh_hamaal():
     current_val = get_risk(now, is_emergency)
     color = "#ff1a1a" if (current_val > 35 and is_emergency) else "#00ff00"
     
-    # תצוגת אחוזים
+    # תצוגה ראשית
     st.markdown(f"""
-        <div style="text-align: center; padding: 15px; border: 1px solid {color}44; border-radius: 10px; background: #000;">
-            <p style="color: #666; font-size: 10px; margin: 0; letter-spacing: 2px;">SECTOR: EVER HAYARKON</p>
-            <h1 style="color: {color}; font-size: 60px; margin: 0; font-family: monospace;">{current_val:.1f}%</h1>
-            <p style="color: #444; font-size: 10px; margin:0;">🕒 {now.strftime('%H:%M:%S')}</p>
+        <div style="text-align: center; padding: 20px; border: 1px solid {color}44; border-radius: 12px; background: #000; box-shadow: 0 0 15px {color}11;">
+            <p style="color: #555; font-size: 10px; margin: 0; letter-spacing: 2.5px; font-weight: bold;">SECTOR: EVER HAYARKON</p>
+            <h1 style="color: {color}; font-size: 65px; margin: 5px 0; font-family: monospace; text-shadow: 0 0 10px {color}33;">{current_val:.1f}%</h1>
+            <p style="color: #333; font-size: 9px; margin:0; font-family: monospace;">🕒 {now.strftime('%H:%M:%S')}</p>
         </div>
     """, unsafe_allow_html=True)
 
     if display_text:
         is_safe = any(word in display_text for word in ["סיום", "שגרה", "לצאת"])
-        b_color = "#002200" if is_safe else "#220000"
-        st.markdown(f"""<div style="background: {b_color}; color: white; padding: 8px; margin: 10px 0; border-radius: 5px; font-size: 12px; font-weight: bold; border: 1px solid {color}; text-align: center;">{'✅' if is_safe else '⚠️'} {display_text}</div>""", unsafe_allow_html=True)
+        b_color = "#001a00" if is_safe else "#1a0000"
+        st.markdown(f"""<div style="background: {b_color}; color: white; padding: 10px; margin: 10px 0; border-radius: 6px; font-size: 12px; font-weight: bold; border: 1px solid {color}66; text-align: center;">{'✅' if is_safe else '⚠️'} {display_text}</div>""", unsafe_allow_html=True)
 
-    # --- הגרף החדש (Matplotlib) - הכי נקי שיש ---
+    # גרף Matplotlib נקי
     times = [i for i in range(100)]
     values = [get_risk(now + timedelta(minutes=i*14), is_emergency) for i in times]
-    
-    fig, ax = plt.subplots(figsize=(6, 1.5))
+    fig, ax = plt.subplots(figsize=(6, 1.2))
     fig.patch.set_facecolor('black')
     ax.set_facecolor('black')
-    ax.plot(times, values, color=color, linewidth=2)
-    ax.fill_between(times, values, color=color, alpha=0.1)
-    ax.axis('off') # מעלים את כל המסגרת והקווים
-    
-    st.pyplot(fig)
+    ax.plot(times, values, color=color, linewidth=2, alpha=0.8)
+    ax.fill_between(times, values, color=color, alpha=0.08)
+    ax.set_ylim(0, 110)
+    ax.axis('off')
+    st.pyplot(fig, clear_figure=True)
 
-    # נורות
+    # החזרת 35 הנורות
+    all_keys = ["12", "13", "11", "14", "YNET", "פקע\"ר", "צה\"ל", "אבו-עלי", "צופר", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
+    
     cols = st.columns(7)
-    keys = ["YNET", "WALLA", "N12", "HAYOM", "צה\"ל", "צופר", "TG", "ROTER", "MOKED", "IAF", "IEC", "FR24", "ISR", "INT"]
-    for idx, key in enumerate(keys):
+    for idx, key in enumerate(all_keys):
         with cols[idx % 7]:
-            st.markdown(f"""<div style="text-align: center;"><div style="width: 6px; height: 6px; background: {color}; border-radius: 50%; display: inline-block;"></div><br><span style="font-size:7px; color: #333;">{key}</span></div>""", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div style="text-align: center; margin-bottom: 8px;">
+                    <div style="width: 6px; height: 6px; background: {color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px {color}aa;"></div>
+                    <br><span style="font-size:7px; color: #333; font-weight: bold;">{key}</span>
+                </div>
+            """, unsafe_allow_html=True)
 
 auto_refresh_hamaal()
