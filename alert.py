@@ -37,11 +37,9 @@ SOURCES = {
     "natbag": "נתב\"ג", "fr24": "FlightRadar24", "radio": "סורק רדיו", "field": "דיווחי שטח", "intel": "Intel Sky"
 }
 
-# --- תפריט צד לשליטה על הטסט ---
+# --- תפריט צד (עם הסליידר שביקשת) ---
 st.sidebar.header("⚙️ הגדרות מערכת")
-# הסליידר שביקשת - מאפשר לשנות את הסיכוי להתראה בזמן אמת
 test_chance = st.sidebar.slider("הסתברות להתראה (%)", 0, 100, 1)
-st.sidebar.info("כדי לעשות טסט: גרור ל-100% ולחץ על סנכרן. בזמן שגרה: השאר על 1%.")
 
 st.markdown("<h1 style='text-align: right;'>🛰️ מרכז OSINT מבצעי - 35 מקורות</h1>", unsafe_allow_html=True)
 
@@ -56,7 +54,7 @@ st.divider()
 
 region = st.selectbox("בחר גזרת ניטור:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
 
-# לוגיקה שמשתמשת בסליידר מהתפריט צד
+# לוגיקת התראה לפי הסליידר
 if np.random.random() < (test_chance / 100):
     st.error(f"🚨 זיהוי אירוע חריג בגזרת {region}!")
     send_alert(f"🚨 <b>התראת OSINT חמה!</b>\nגזרה: {region}\nזמן: {get_time().strftime('%H:%M')}\nסטטוס: אימות מול 35 מקורות.")
@@ -68,11 +66,13 @@ with col_graph:
     values = [max(12 + np.sin(i/10)*3 + np.random.normal(0,0.5), 5) for i in range(144)]
     fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color='#00ff00', width=2)))
     fig.update_layout(template="plotly_dark", height=350, margin=dict(l=0,r=0,t=0,b=0))
-    st.plotly_chart(fig, use_container_width=True)
+    
+    # השינוי כאן: staticPlot=True מבטל את ההגדלה והאינטראקציה עם העכבר
+    st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True})
 
 with col_stat:
     st.metric("רמת סיכון רגעית", f"{np.random.uniform(11.8, 12.5):.1f}%")
-    st.write("**מערכת הניטור פועלת בענן 24/7**")
+    st.write("**המערכת פועלת בענן 24/7**")
 
 if st.button("סנכרן נתונים ידנית 🔄"):
     st.rerun()
