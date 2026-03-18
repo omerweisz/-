@@ -9,7 +9,7 @@ import time
 # הגדרות דף
 st.set_page_config(page_title="חמ\"ל OSINT - 24/7", layout="wide")
 
-# אתחול מצב התראה בזיכרון האתר
+# אתחול מצב התראה
 if 'alert_mode' not in st.session_state:
     st.session_state.alert_mode = False
 
@@ -44,11 +44,10 @@ SOURCES = {
 
 st.markdown("<h1 style='text-align: right;'>🛰️ מרכז OSINT מבצעי - 35 מקורות</h1>", unsafe_allow_html=True)
 
-# קביעת צבע המקורות לפי מצב ההתראה
+# צבעים לפי מצב
 status_color = "#ff0000" if st.session_state.alert_mode else "#00ff00"
-status_text = "חריג" if st.session_state.alert_mode else "תקין"
 
-# תצוגת ה"עיניים" המסונכרנות
+# תצוגת ה"עיניים"
 keys = list(SOURCES.keys())
 for i in range(0, len(keys), 5):
     cols = st.columns(5)
@@ -64,47 +63,49 @@ st.divider()
 
 region = st.selectbox("בחר גזרת ניטור:", ["תל אביב - עבר הירקון", "ירושלים", "חיפה", "דרום", "צפון"])
 
-# לוגיקת בדיקה (כאן אתה משנה מילה כדי לעשות ניסוי)
 def check_real_sources():
     try:
-        # בודק ב-RSS של Ynet
         response = requests.get("https://www.ynet.co.il/Integration/StoryRss2.xml", timeout=5)
-        # לניסוי: תחליף את "צבע אדום" במילה שמופיעה עכשיו בחדשות (כמו "ישראל")
+        # לניסוי: תחליף את "צבע אדום" במילה שמופיעה עכשיו (כמו "ישראל")
         if "צבע אדום" in response.text or "התרעה" in response.text:
             return True
         return False
-    except:
-        return False
+    except: return False
 
 if st.button("סנכרן נתונים ידנית 🔄", use_container_width=True):
-    with st.spinner("מבצע אימות מוצלב מול 35 מקורות..."):
+    with st.spinner("סורק מקורות..."):
         time.sleep(1)
         if check_real_sources():
             st.session_state.alert_mode = True
-            send_alert(f"🚨 <b>זיהוי חריג!</b>\nגזרה: {region}\nסטטוס: אימות מול מקורות חיצוניים הצליח.")
-            st.rerun() # מרענן כדי לצבוע את העיניים באדום
+            send_alert(f"🚨 <b>זיהוי חריג!</b>\nגזרה: {region}")
         else:
             st.session_state.alert_mode = False
-            st.success("סריקה הושלמה: הכל תקין.")
-            st.rerun()
+        st.rerun()
 
-# גרף ותצוגה
+# גרף ותצוגה - התיקון לעכבר כאן!
 col_graph, col_stat = st.columns([2, 1])
 with col_graph:
     st.subheader("🕒 תחזית הסתברותית")
     times = [get_time() + timedelta(minutes=10*i) for i in range(144)]
     values = [max(12 + np.sin(i/10)*3 + np.random.normal(0,0.5), 5) for i in range(144)]
-    # שינוי צבע הגרף לאדום בזמן התראה
     graph_color = "#ff0000" if st.session_state.alert_mode else "#00ff00"
-    fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color=graph_color, width=2)))
-    fig.update_layout(template="plotly_dark", height=300, margin=dict(l=0,r=0,t=0,b=0))
-    st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True})
+    
+    fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color=graph_color, width=2), hovertemplate='זמן: %{x}<br>סיכון: %{y:.1f}%<extra></extra>'))
+    
+    fig.update_layout(
+        template="plotly_dark", 
+        height=300, 
+        margin=dict(l=0,r=0,t=0,b=0),
+        xaxis=dict(fixedrange=True), # מבטל זום בציר X
+        yaxis=dict(fixedrange=True), # מבטל זום בציר Y
+        dragmode=False               # מבטל אפשרות גרירה וזום
+    )
+    
+    # config כאן מחזיר את העכבר אבל בלי הכלים של הזום
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 with col_stat:
-    st.metric("רמת סיכון", f"{np.random.uniform(11.8, 12.5):.1f}%", delta=status_text, delta_color="inverse" if st.session_state.alert_mode else "normal")
-    if st.session_state.alert_mode:
-        st.warning("⚠️ לבדוק דיווחי שטח בגזרה נבחרת")
-
-if st.sidebar.button("אפס מערכת 🛠️"):
-    st.session_state.alert_mode = False
-    st.rerun()
+    st.metric("רמת סיכון", f"{np.random.uniform(11.8, 12.5):.1f}%")
+    if st.sidebar.button("אפס מערכת 🛠️"):
+        st.session_state.alert_mode = False
+        st.rerun()
