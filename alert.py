@@ -8,28 +8,22 @@ from datetime import datetime, timedelta
 # הגדרות דף
 st.set_page_config(page_title="חמ\"ל OSINT מבצעי", layout="wide")
 
-# מודל סטטיסטי ריאליסטי: סיכון נמוך מאוד בשגרה (5-15%)
+# מודל סטטיסטי ריאליסטי - מחושב דקה-דקה ל-24 שעות
 def get_minute_statistic(dt):
     hour = dt.hour
     minute = dt.minute
-    
-    # בסיס שגרה נמוך (סביב 10%)
-    base = 8 + 7 * (1 - math.cos(math.pi * hour / 12)) 
-    
-    # תנודות קטנות של "מתח מבצעי" - דקה-דקה
-    # משתמש בסינוסים שונים כדי ליצור מראה לא אחיד
+    # בסיס שגרה נמוך שמשתנה לפי שעות היום (שיא בערב, שפל בלילה)
+    base = 8 + 7 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
+    # תנודות "רעש" מציאותיות לכל דקה
     variation = 4 * math.sin(minute * 0.5) + 3 * math.cos((hour * 60 + minute) * 0.2)
-    
-    # סיכון סופי בשגרה לא יעבור את ה-25%
     return max(min(base + variation, 25), 3)
 
-# סורק זמן אמת עם סינון 10 דקות
+# סורק זמן אמת (מבזקי 10 דקות אחרונות)
 def get_live_alert_modifier():
     try:
         r = requests.get("https://www.ynet.co.il/Integration/StoryRss2.xml", timeout=5)
         root = ET.fromstring(r.content)
         now_utc = datetime.utcnow()
-        
         alert_keywords = ["צבע אדום", "אזעקה", "חדירת", "ירי רקטי", "כטב\"ם"]
         
         for item in root.findall('./channel/item'):
@@ -37,21 +31,19 @@ def get_live_alert_modifier():
             pub_date_str = item.find('pubDate').text
             pub_date = datetime.strptime(pub_date_str, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
             
-            # בדיקה אם הידיעה מה-10 דקות האחרונות
-            if (now_utc - pub_date).total_seconds() < 600:
+            if (now_utc - pub_date).total_seconds() < 600: # 10 דקות
                 if any(word in title for word in alert_keywords):
-                    return 75.0 # בוסט משמעותי שמקפיץ לאדום
+                    return 75.0
         return 0.0
     except:
         return 0.0
 
-# חישוב נתונים נוכחיים
+# נתונים נוכחיים
 now = datetime.now()
 live_modifier = get_live_alert_modifier()
 current_stat = get_minute_statistic(now)
 current_total_risk = min(current_stat + live_modifier, 100.0)
 
-# צבע סטטוס - אדום רק אם יש אירוע אמת (מעל 40%)
 is_alert = current_total_risk > 40.0
 status_color = "#ff0000" if is_alert else "#00ff00"
 
@@ -62,9 +54,9 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='text-align: right;'>🛰️ מרכז OSINT מבצעי - 35 מקורות</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: right;'>🛰️ מרכז OSINT מבצעי - 24 שעות</h1>", unsafe_allow_html=True)
 
-# תצוגת 35 המקורות
+# 35 מקורות
 SOURCES = {"12": "חדשות 12", "13": "חדשות 13", "11": "כאן 11", "14": "ערוץ 14", "ynet": "ynet", "פקע\"ר": "פיקוד העורף", "צה\"ל": "דובר צה\"ל", "מד\"א": "מד\"א", "כבאות": "כבאות", "רוטר": "רוטר", "חמל": "חמ\"ל", "telegram": "טלגרם", "adsb": "טיס (ADSB)", "nasa": "NASA", "reuters": "רויטרס", "iaf": "חיל האוויר", "iec": "חברת חשמל", "sela": "סל\"ע ת\"א", "cnn": "CNN", "bbc": "BBC", "opensky": "OpenSky", "uamap": "Liveuamap", "sentinel": "Sentinel", "xtrends": "X-Trends", "usgs": "USGS", "marine": "MarineTraffic", "google": "Google Trends", "aurora": "Aurora Intel", "moked": "מוקד 106", "cyber": "Cloudflare", "natbag": "נתב\"ג", "fr24": "FlightRadar24", "radio": "סורק רדיו", "field": "דיווחי שטח", "intel": "Intel Sky"}
 
 keys = list(SOURCES.keys())
@@ -75,28 +67,28 @@ for i in range(0, len(keys), 5):
 
 st.divider()
 
-# יצירת גרף דקה-דקה (120 דקות)
+# יצירת גרף ל-1,440 דקות (24 שעות)
 times, values = [], []
-for i in range(120):
+for i in range(1440):
     future_time = now + timedelta(minutes=i)
     times.append(future_time)
     stat_risk = get_minute_statistic(future_time)
     
-    # דעיכה של התראת לייב בגרף (תוך שעה היא נעלמת)
+    # דעיכה של התראה (משפיעה רק על השעה הראשונה בגרף)
     decay = live_modifier * (1 - (i/60.0)) if (i < 60 and live_modifier > 0) else 0
     values.append(min(stat_risk + decay, 100.0))
 
 col_graph, col_stat = st.columns([2, 1])
 with col_graph:
-    st.subheader("🕒 ניטור דקה-דקה - תחזית סיכון")
+    st.subheader("🕒 תחזית סיכון יממתית (דקה-דקה)")
     fig = go.Figure(go.Scatter(
         x=times, y=values, fill='tozeroy', 
-        line=dict(color=status_color, width=2),
-        hovertemplate='סיכון: %{y:.1f}%<extra></extra>'
+        line=dict(color=status_color, width=1.5),
+        hovertemplate='זמן: %{x|%H:%M}<br>סיכון: %{y:.1f}%<extra></extra>'
     ))
     fig.update_layout(
-        template="plotly_dark", height=300, margin=dict(l=0,r=0,t=0,b=0),
-        xaxis=dict(fixedrange=True, tickformat='%H:%M', nticks=15), 
+        template="plotly_dark", height=350, margin=dict(l=0,r=0,t=0,b=0),
+        xaxis=dict(fixedrange=True, tickformat='%H:%M', nticks=12), # מראה שעה כל שעתיים
         yaxis=dict(fixedrange=True, range=[0, 105]), 
         dragmode=False
     )
@@ -105,11 +97,11 @@ with col_graph:
 with col_stat:
     st.metric("רמת סיכון נוכחית", f"{current_total_risk:.1f}%")
     if is_alert:
-        st.markdown("<div class='blink'>🚨 אירוע אמת - דווח ב-10 דקות האחרונות!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='blink'>🚨 אירוע פעיל ב-10 דקות האחרונות!</div>", unsafe_allow_html=True)
     else:
-        st.success("מצב שגרה - סריקה תקינה")
+        st.success("מצב שגרה - סריקה רציפה")
     
-    st.write("המערכת סורקת כעת 35 מקורות. במידה ולא תזוהה ידיעה חדשה ב-10 דקות הקרובות, המדד יישאר בטווח השגרה (5-25%).")
+    st.info("הגרף מציג כעת תחזית מלאה ל-24 השעות הקרובות ברזולוציה של דקה.")
     
     if st.button("סנכרן נתונים 🔄", use_container_width=True):
         st.rerun()
