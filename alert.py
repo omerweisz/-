@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timedelta
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל OSINT - תצוגה קבועה", layout="wide")
+st.set_page_config(page_title="חמ\"ל OSINT - זמן ישראל", layout="wide")
 
 def get_risk(dt):
     hour = dt.hour
@@ -15,12 +15,15 @@ def get_risk(dt):
 
 @st.fragment(run_every=30)
 def auto_refresh_hamaal():
-    now = datetime.now()
+    # --- תיקון זמן לישראל (UTC + 2) ---
+    # השרת רץ לפי זמן עולמי, אז אנחנו מוסיפים לו שעתיים באופן ידני
+    now_utc = datetime.utcnow()
+    now = now_utc + timedelta(hours=2) 
     
     st.markdown(f"""
         <div style='text-align: right;'>
             <h1 style='margin-bottom: 0;'>🛰️ חמ\"ל OSINT מבצעי</h1>
-            <p style='color: #00ff00; font-family: monospace;'>זמן מערכת: {now.strftime('%H:%M:%S')} | סנכרון אוטומטי פעיל</p>
+            <p style='color: #00ff00; font-family: monospace;'>זמן ישראל (סנכרון חי): {now.strftime('%H:%M:%S')}</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -42,23 +45,21 @@ def auto_refresh_hamaal():
 
     st.divider()
 
-    # יצירת הגרף
+    # יצירת הגרף (מתחיל מהשעה הנכונה בישראל)
     times = [now + timedelta(minutes=i) for i in range(1440)]
     values = [get_risk(t) for t in times]
 
     fig = go.Figure(go.Scatter(x=times, y=values, fill='tozeroy', line=dict(color="#00ff00", width=1.5)))
     
-    # --- כאן ביטלנו את הזום והגרירה ---
     fig.update_layout(
         template="plotly_dark", 
         height=300, 
         margin=dict(l=0,r=0,t=0,b=0),
-        xaxis=dict(tickformat='%H:%M', nticks=12, fixedrange=True), # ביטול זום ב-X
-        yaxis=dict(fixedrange=True, range=[0, 35]),                 # ביטול זום ב-Y
-        dragmode=False                                              # ביטול אפשרות גרירה
+        xaxis=dict(tickformat='%H:%M', nticks=12, fixedrange=True),
+        yaxis=dict(fixedrange=True, range=[0, 35]),
+        dragmode=False
     )
 
-    # config={'displayModeBar': False} מעלים את סרגל הכלים של פלוטלי למעלה
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     
     st.metric("רמת סיכון נוכחית", f"{get_risk(now):.1f}%")
