@@ -91,14 +91,14 @@ with col_graph:
     
     fig = go.Figure(go.Scatter(
         x=times, y=values, fill='tozeroy', 
-        line=dict(color=status_color, width=2, shape='spline'), # spline הופך את הקו למעוקל וחלק
+        line=dict(color=status_color, width=2, shape='spline'), 
         hovertemplate='זמן: %{x|%H:%M}<br>סיכון מחושב: %{y:.1f}%<extra></extra>'
     ))
     
-    # נעילת זום
+    # נעילת זום והוספת פורמט דקות לציר ה-X
     fig.update_layout(
         template="plotly_dark", height=300, margin=dict(l=0,r=0,t=0,b=0),
-        xaxis=dict(fixedrange=True), yaxis=dict(fixedrange=True, range=[0, 105]), 
+        xaxis=dict(fixedrange=True, tickformat='%H:%M'), yaxis=dict(fixedrange=True, range=[0, 105]), 
         dragmode=False
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
