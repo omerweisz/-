@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - STRATEGIC V14", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - STRATEGIC V15", layout="wide")
 
 st.markdown("""
     <style>
@@ -35,19 +35,20 @@ def get_source_status(url, name):
         for item in items:
             title = item.find('title').text
             pub_date = parser.parse(item.find('pubDate').text)
-            diff_min = (now - pub_date).total_seconds() / 60
+            diff_min = int((now - pub_date).total_seconds() / 60)
             
-            # בדיקה אם האירוע קרה ב-20 הדקות האחרונות (הגדלנו זמן)
+            # הצגת זמן עבר בתוך הכותרת
+            time_tag = f"({diff_min} דק')"
+            
             if 0 <= diff_min <= 20:
                 if any(cw in title for cw in critical_words) and any(tz in title for tz in target_zones):
-                    return "RED", title, pub_date
+                    return "RED", f"{time_tag} {title}", pub_date
                 if any(pw in title for pw in pre_alert_words) or ("איראן" in title):
-                    return "ORANGE_RED", title, pub_date
+                    return "ORANGE_RED", f"{time_tag} {title}", pub_date
             
-            # נורה נשארת צבעונית ל-40 דקות כ"זיכרון" של המקור
             if 0 <= diff_min <= 40:
                 if any(cw in title for cw in critical_words) and any(loc in title for loc in ["השרון", "מרכז"]):
-                    return "ORANGE", title, pub_date
+                    return "ORANGE", f"{time_tag} {title}", pub_date
                     
         return "GREEN", "", None
     except:
@@ -89,22 +90,21 @@ def auto_refresh_hamaal():
     current_val = get_risk(now, global_status)
     main_color = {"RED": "#ff1a1a", "ORANGE_RED": "#ff4400", "ORANGE": "#ffaa00", "GREEN": "#00ff00"}[global_status]
 
-    # תצוגה
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {main_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {main_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold;">UNIT: EVER HAYARKON | STRATEGIC MONITOR V14</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold;">UNIT: EVER HAYARKON | V15 PRECISION</p>
             <h1 style="color: {main_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {main_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
                 <span style="color: {main_color};">●</span> {now.strftime('%H:%M:%S')} 
-                {f"<span style='color: #ffaa00; margin-left: 15px;'>LAST_ALERT: {last_event_time.strftime('%H:%M:%S')}</span>" if last_event_time else ""}
+                {f"<span style='color: #0066ff; margin-left: 15px;'>EVENT_LATCHED: {last_event_time.strftime('%H:%M:%S')}</span>" if last_event_time else ""}
             </div>
         </div>
     """, unsafe_allow_html=True)
 
     if latest_msg:
-        st.markdown(f"""<div style="background: rgba(30,0,0,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 2px solid {main_color}; text-align: center; font-weight: bold;">⚠️ {latest_msg}</div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="background: rgba(30,0,0,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 2px solid {main_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
 
-    # החזרת הגרף
+    # גרף
     times = [now + timedelta(minutes=i) for i in range(1440)]
     values = [get_risk(t, "GREEN") for t in times]
     fig = go.Figure()
@@ -113,7 +113,7 @@ def auto_refresh_hamaal():
     fig.update_layout(margin=dict(l=0, r=0, t=5, b=0), height=140, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(visible=False), yaxis=dict(visible=False, range=[0, 115]), showlegend=False)
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-    # נורות בקרה
+    # נורות
     cols = st.columns(7)
     all_keys = ["YNET", "וואלה", "ישראל היום", "צופר", "פקע\"ר", "צה\"ל", "אבו-עלי", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
     for idx, key in enumerate(all_keys):
