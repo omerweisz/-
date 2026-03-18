@@ -9,11 +9,10 @@ from dateutil import parser
 # הגדרות דף
 st.set_page_config(page_title="חמ\"ל עבר הירקון - PRO", layout="wide")
 
-# CSS להעלמת רקעים לבנים ושיפור נראות הטקסט
 st.markdown("""
     <style>
     .stPlotlyChart { background-color: transparent !important; }
-    div[data-testid="stPlotlyChart"] { background-color: transparent !important; }
+    div[data-testid="stVerticalBlock"] { gap: 0.1rem; }
     .main { background-color: #000000; }
     #MainMenu, footer, header {visibility: hidden;}
     </style>
@@ -63,7 +62,7 @@ def auto_refresh_hamaal():
             <p style="color: #888; font-size: 11px; margin: 0; letter-spacing: 2px; font-weight: bold;">SECTOR: EVER HAYARKON</p>
             <h1 style="color: {color}; font-size: 60px; margin: 0; font-family: monospace;">{current_val:.1f}%</h1>
             <div style="color: white; font-size: 14px; font-family: monospace; font-weight: bold; margin-top: 5px;">
-                <span style="color: {color};">●</span> זמן עדכון: {now.strftime('%H:%M:%S')}
+                <span style="color: {color};">●</span> עדכון: {now.strftime('%H:%M:%S')}
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -71,20 +70,21 @@ def auto_refresh_hamaal():
     if display_text:
         st.markdown(f"""<div style="background: #1a0000; color: white; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 12px; border: 1px solid {color}; text-align: center; font-weight: bold;">⚠️ {display_text}</div>""", unsafe_allow_html=True)
 
-    # --- החזרת גרף Plotly המקורי ---
-    times = [now + timedelta(minutes=i*20) for i in range(50)]
+    # --- גרף Plotly מתוקן (נראה גבוה יותר) ---
+    times = [now + timedelta(minutes=i*15) for i in range(40)]
     values = [get_risk(t, is_emergency) for t in times]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=times, y=values, fill='tozeroy', 
-        line=dict(color=color, width=3),
-        fillcolor=f"rgba({255 if is_emergency else 0}, {26 if is_emergency else 255}, 0, 0.1)"
+        line=dict(color=color, width=4),
+        fillcolor=f"rgba({255 if is_emergency else 0}, {255 if not is_emergency else 26}, 0, 0.15)"
     ))
     fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0), height=150,
+        margin=dict(l=0, r=0, t=10, b=0), height=180,
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(visible=False, fixedrange=True),
-        yaxis=dict(visible=False, fixedrange=True, range=[0, 110]),
+        # שינוי הטווח לדינמי יותר כדי ש-15% יראה משמעותי
+        yaxis=dict(visible=False, fixedrange=True, range=[0, 110 if is_emergency else 40]),
         showlegend=False, dragmode=False
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
