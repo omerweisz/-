@@ -49,7 +49,7 @@ if 'emergency_mode' not in st.session_state:
 def core_engine_v34(selected_region):
     isr_now_str = get_israel_time().strftime('%H:%M')
     # סיכוי של 1% להפעלת התראה בזמן לחיצה על סנכרון
-    if np.random.random() < 0.01:
+  if True:
         st.session_state['locked_risk'] = 98.8
         st.session_state['emergency_mode'] = True
         
