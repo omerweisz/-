@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - V31 FUTURE-VIEW", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V32 ROLLING-24H", layout="wide")
 
 st.markdown("""
     <style>
@@ -21,8 +21,7 @@ st.markdown("""
 def get_source_status(url, name):
     active_alarm = ["אזעקה", "צבע אדום", "התרעות הופעלו"]
     launches = ["שיגור", "שיגורים", "זוהו שיגורים"]
-    # מילים שמאפסות את האירוע באופן סופי
-    release_words = ["חזרה לשגרה", "הסרת הגבלות", "ניתן לצאת", "סיום האירוע", "ארגעה", "חזרה לשגרה"]
+    release_words = ["חזרה לשגרה", "הסרת הגבלות", "ניתן לצאת", "סיום האירוע", "ארגעה"]
     target_zones = ["תל אביב", "גוש דן", "מרכז", "עבר הירקון", "גלילות", "רמת אביב", "חולון", "רמת גן", "בני ברק", "פתח תקווה"]
     
     now = datetime.now(timezone(timedelta(hours=2)))
@@ -39,15 +38,16 @@ def get_source_status(url, name):
             diff_min = int((now - pub_date).total_seconds() / 60)
             
             if 0 <= diff_min <= 15:
-                # אם נמצאה הודעת שחרור ב-15 הדקות האחרונות, המקור הזה נחשב לירוק/בטוח
+                # תיעדוף שחרור - מבטל הכל
                 if any(rw in title for rw in release_words):
                     return "RELEASE", f"({diff_min} דק') {title}", pub_date
                 
-                # אם אין שחרור, בודקים סכנות
+                # אזעקה מפורשת במרכז (100%)
                 if any(aa in title for aa in active_alarm) and any(tz in title for tz in target_zones):
                     if latest_event["status"] != "ALARM_100":
                         latest_event = {"status": "ALARM_100", "msg": f"({diff_min} דק') {title}", "date": pub_date}
                 
+                # שיגורים (95%)
                 elif any(l in title for l in launches) and (any(tz in title for tz in target_zones) or "איראן" in title):
                     if latest_event["status"] not in ["ALARM_100", "LAUNCH_95"]:
                         latest_event = {"status": "LAUNCH_95", "msg": f"({diff_min} דק') {title}", "date": pub_date}
@@ -55,12 +55,13 @@ def get_source_status(url, name):
         return latest_event["status"], latest_event["msg"], latest_event["date"]
     except: return "GREEN", "", None
 
-def get_risk(dt, global_status):
+def get_risk(dt, global_status="GREEN"):
+    # אם יש סטטוס פעיל עכשיו, הוא מקבל עדיפות רק לזמן הנוכחי
     if global_status == "ALARM_100": return 100.0
     if global_status == "LAUNCH_95": return 95.0
-    if global_status == "RELEASE": return 10.5
+    if global_status == "RELEASE": return 10.0
     
-    # חישוב סיכון בסיסי לפי שעה ביום
+    # חישוב סיכון בסיסי (מתמטי) לפי שעה
     hour = dt.hour + dt.minute / 60.0
     base = 10 + 5 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
     return max(min(base, 100), 4.2)
@@ -79,7 +80,6 @@ def auto_refresh_hamaal():
         temp_statuses.append(res)
         if msg: latest_msg = msg
 
-    # קביעת סטטוס סופי: אזעקה > שיגור > שחרור > שגרה
     if "ALARM_100" in temp_statuses: global_status = "ALARM_100"
     elif "LAUNCH_95" in temp_statuses: global_status = "LAUNCH_95"
     elif "RELEASE" in temp_statuses: global_status = "RELEASE"
@@ -87,33 +87,29 @@ def auto_refresh_hamaal():
     current_val = get_risk(now, global_status)
     display_color = {"ALARM_100": "#ff1a1a", "LAUNCH_95": "#ff4400", "RELEASE": "#00ff00", "GREEN": "#00ff00"}.get(global_status, "#00ff00")
 
-    # כותרת ואחוזים
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {display_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {display_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | STRATEGIC V31</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | ROLLING V32</p>
             <h1 style="color: {display_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {display_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px;">{now.strftime('%H:%M:%S')}</div>
         </div>
     """, unsafe_allow_html=True)
 
-    # הודעה מתחת לאחוזים
     if latest_msg:
         st.markdown(f"""<div style="background: rgba(20,20,20,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 1px solid {display_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
     else: st.markdown("<div style='height: 62px;'></div>", unsafe_allow_html=True)
 
-    # גרף 24 שעות (קדימה בלבד)
-    base_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    full_day_times = [base_today + timedelta(minutes=i) for i in range(1440)]
-    full_day_values = [get_risk(t, "GREEN") for t in full_day_times]
+    # גרף רץ: מעכשיו + 24 שעות
+    rolling_times = [now + timedelta(minutes=i) for i in range(1440)] # 1440 דקות = 24 שעות
+    rolling_values = [get_risk(t, "GREEN") for t in rolling_times] # צפי נקי בלי האזעקה הנוכחית לאורך כל היום
     
     fig = go.Figure()
-    # קו רקע של היום
-    fig.add_trace(go.Scatter(x=full_day_times, y=full_day_values, fill='tozeroy', line=dict(color="#333", width=2), hovertemplate="<b>Time:</b> %{x|%H:%M}<br><b>Base Risk:</b> %{y:.1f}%<extra></extra>"))
-    # הנקודה הנוכחית
+    fig.add_trace(go.Scatter(x=rolling_times, y=rolling_values, fill='tozeroy', line=dict(color="#333", width=2), hovertemplate="<b>Time:</b> %{x|%H:%M}<br><b>Risk:</b> %{y:.1f}%<extra></extra>"))
+    # הנקודה הנוכחית עם הסטטוס המבצעי
     fig.add_trace(go.Scatter(x=[now], y=[current_val], mode='markers', marker=dict(color=display_color, size=12, line=dict(color='white', width=1)), hoverinfo='skip'))
     
     fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=140, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                      xaxis=dict(visible=True, range=[base_today, base_today + timedelta(hours=23, minutes=59)], showgrid=False, color="#444", tickformat="%H:%M"),
+                      xaxis=dict(visible=True, range=[now, now + timedelta(hours=24)], showgrid=False, color="#444", tickformat="%H:%M"),
                       yaxis=dict(visible=False, range=[0, 115]), showlegend=False)
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
