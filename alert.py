@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - V23 PURE RISK", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V25 GRADUATED RISK", layout="wide")
 
 st.markdown("""
     <style>
@@ -19,10 +19,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def get_source_status(url, name):
-    # מילים שמקפיצות אחוזים (סכנה מיידית)
-    critical_alerts = ["אזעקה", "צבע אדום", "התרעות הופעלו", "חדירת כלי טיס", "ירי טילים"]
-    # מילים שרק מציגות הודעה (מידע חדשותי)
-    news_only = ["הרוג", "פצוע", "נפילה", "יירוט", "נזק", "פגיעה ישירה", "מד\"א", "איראן"]
+    # הגדרות מילים
+    active_alarm = ["אזעקה", "צבע אדום", "התרעות הופעלו"]
+    launches_detected = ["שיגור", "שיגורים", "זוהו שיגורים", "חדירת כלי טיס"]
+    news_only = ["הרוג", "פצוע", "נזק", "פגיעה", "מד\"א", "נפילה"]
     release_words = ["חזרה לשגרה", "הסרת הגבלות", "ניתן לצאת"]
     target_zones = ["תל אביב", "גוש דן", "מרכז", "עבר הירקון", "גלילות", "רמת אביב", "חולון", "רמת גן", "בני ברק", "פתח תקווה"]
     
@@ -40,10 +40,17 @@ def get_source_status(url, name):
                 # 1. שחרור
                 if any(rw in title for rw in release_words):
                     return "RELEASE", f"({diff_min} דק') {title}", pub_date
-                # 2. אזעקה (מקפיץ אחוזים)
-                if any(ca in title for ca in critical_alerts) and any(tz in title for tz in target_zones):
-                    return "RED_ALERT", f"({diff_min} דק') {title}", pub_date
-                # 3. דיווח חדשותי (הודעה בלבד, בלי שינוי אחוזים)
+                
+                # 2. אזעקה פעילה (100%)
+                if any(aa in title for aa in active_alarm) and any(tz in title for tz in target_zones):
+                    return "ALARM_100", f"({diff_min} דק') {title}", pub_date
+                
+                # 3. זוהו שיגורים (95%)
+                if any(ld in title for ld in launches_detected):
+                    if any(tz in title for tz in target_zones) or "איראן" in title:
+                        return "LAUNCH_95", f"({diff_min} דק') {title}", pub_date
+                
+                # 4. מידע כללי (הודעה בלבד)
                 if any(no in title for no in news_only):
                     return "INFO_ONLY", f"({diff_min} דק') {title}", pub_date
                     
@@ -51,11 +58,10 @@ def get_source_status(url, name):
     except: return "GREEN", "", None
 
 def get_risk(dt, global_status):
-    # האחוזים משתנים רק ב-RED_ALERT או ב-RELEASE
-    if global_status == "RED_ALERT": return 100.0
+    if global_status == "ALARM_100": return 100.0
+    if global_status == "LAUNCH_95": return 95.0
     if global_status == "RELEASE": return 15.0
-    
-    # שגרה (גם אם יש הודעת INFO_ONLY)
+    # שגרה
     hour = dt.hour + dt.minute / 60.0
     base = 10 + 5 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
     return max(min(base, 100), 4.2)
@@ -70,27 +76,27 @@ def auto_refresh_hamaal():
         res, msg, p_date = get_source_status(url, name)
         source_results[name] = res
         
-        # לוגיקת הכרעה לאחוזים
-        if res == "RED_ALERT":
-            global_status = "RED_ALERT"
-        elif res == "RELEASE" and global_status != "RED_ALERT":
+        # לוגיקת עדיפות
+        if res == "ALARM_100":
+            global_status = "ALARM_100"
+        elif res == "LAUNCH_95" and global_status != "ALARM_100":
+            global_status = "LAUNCH_95"
+        elif res == "RELEASE" and global_status not in ["ALARM_100", "LAUNCH_95"]:
             global_status = "RELEASE"
-        
-        # שמירת ההודעה הכי עדכנית בלי קשר לאחוזים
-        if msg: 
-            latest_msg = msg
-            last_event_time = p_date
+            
+        if msg: latest_msg = msg
 
     current_val = get_risk(now, global_status)
     
-    # צבע הממשק נקבע לפי סוג ההודעה, אבל האחוזים לפי get_risk
+    # בחירת צבע
     display_color = "#00ff00"
-    if any(r == "RED_ALERT" for r in source_results.values()): display_color = "#ff1a1a"
+    if global_status == "ALARM_100": display_color = "#ff1a1a"
+    elif global_status == "LAUNCH_95": display_color = "#ff4400" # כתום חזק לשיגורים
     elif any(r == "INFO_ONLY" for r in source_results.values()): display_color = "#ffaa00"
 
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {display_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {display_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | V23 PURE-RISK</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | V25 GRADUATED-RISK</p>
             <h1 style="color: {display_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {display_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
                 <span style="color: {display_color};">●</span> {now.strftime('%H:%M:%S')} 
@@ -102,15 +108,13 @@ def auto_refresh_hamaal():
         st.markdown(f"""<div style="background: rgba(20,20,20,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 1px solid {display_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
     else: st.markdown("<div style='height: 62px;'></div>", unsafe_allow_html=True)
 
-    # גרף 24 שעות
+    # גרף
     base_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
     full_day_times = [base_time + timedelta(minutes=i) for i in range(1440)]
     full_day_values = [get_risk(t, "GREEN") for t in full_day_times]
-    
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=full_day_times, y=full_day_values, fill='tozeroy', line=dict(color="#222", width=2), hovertemplate="<b>Time:</b> %{x|%H:%M}<br><b>Risk:</b> %{y:.1f}%<extra></extra>"))
     fig.add_trace(go.Scatter(x=[now], y=[current_val], mode='markers', marker=dict(color=display_color, size=14, line=dict(color='white', width=2)), hoverinfo='skip'))
-    
     fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=160, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified", xaxis=dict(visible=False, fixedrange=True), yaxis=dict(visible=False, range=[0, 115], fixedrange=True), showlegend=False, dragmode=False)
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
@@ -118,7 +122,7 @@ def auto_refresh_hamaal():
     all_keys = ["YNET", "וואלה", "ישראל היום", "צופר", "פקע\"ר", "צה\"ל", "אבו-עלי", "LIVEMAP", "FR24", "ADSB", "IAF", "NASA", "USGS", "רוטר", "חמ\"ל", "TELEGRAM", "MOKED", "SELA", "IEC", "CYBER", "GOOGLE", "MARINE", "SENTINEL", "CNN", "BBC", "REUTERS", "AL-JAZ", "FOX", "AYALON", "NATBAG", "RADIO", "FIELD", "INTEL"]
     for idx, key in enumerate(all_keys):
         node_status = source_results.get(key, "GREEN")
-        node_color = {"RED_ALERT": "#ff1a1a", "INFO_ONLY": "#ffaa00", "RELEASE": "#00ff00", "GREEN": "#00ff00"}[node_status]
+        node_color = {"ALARM_100": "#ff1a1a", "LAUNCH_95": "#ff4400", "INFO_ONLY": "#ffaa00", "RELEASE": "#00ff00", "GREEN": "#00ff00"}.get(node_status, "#00ff00")
         with cols[idx % 7]:
             st.markdown(f"""<div style="text-align: center; margin-bottom: 12px;"><div style="width: 8px; height: 8px; background: {node_color}; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px {node_color};"></div><br><span style="font-size:8px; color: #FFFFFF; font-weight: bold; opacity: 0.6;">{key}</span></div>""", unsafe_allow_html=True)
 
