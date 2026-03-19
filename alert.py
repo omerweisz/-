@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - V27 PRIORITY-ALARM", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V29 PRECISION-ALARM", layout="wide")
 
 st.markdown("""
     <style>
@@ -19,11 +19,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def get_source_status(url, name):
-    # הגדרות מחמירות
-    active_alarm = ["אזעקה", "צבע אדום", "התרעות הופעלו", "חדירת כלי טיס"]
-    launches = ["שיגור", "שיגורים", "זוהו שיגורים"]
-    release_words = ["חזרה לשגרה", "הסרת הגבלות", "ניתן לצאת", "ארגעה"]
-    target_zones = ["תל אביב", "גוש דן", "מרכז", "עבר הירקון", "גלילות", "רמת אביב"]
+    # הגדרות מחמירות להפרדה בין מצבים
+    active_alarm = ["אזעקה", "צבע אדום", "התרעות הופעלו"]
+    immediate_launches = ["שיגור", "שיגורים", "זוהו שיגורים"]
+    # מילים שמעידות על סיום אירוע
+    release_words = ["חזרה לשגרה", "הסרת הגבלות", "ניתן לצאת", "סיום האירוע", "ארגעה"]
+    target_zones = ["תל אביב", "גוש דן", "מרכז", "עבר הירקון", "גלילות", "רמת אביב", "חולון", "רמת גן", "בני ברק", "פתח תקווה"]
     
     now = datetime.now(timezone(timedelta(hours=2)))
     try:
@@ -36,21 +37,21 @@ def get_source_status(url, name):
             diff_min = int((now - pub_date).total_seconds() / 60)
             
             if 0 <= diff_min <= 15:
-                # 1. עדיפות 1: אזעקה (100%) - בודק קודם כל אם יש אזעקה באזורי היעד
-                if any(aa in title for aa in active_alarm) and any(tz in title for tz in target_zones):
-                    return "ALARM_100", f"({diff_min} דק') {title}", pub_date
-                
-                # 2. עדיפות 2: שיגורים (95%)
-                if any(l in title for l in launches):
-                    if any(tz in title for tz in target_zones) or "איראן" in title:
-                        return "LAUNCH_95", f"({diff_min} דק') {title}", pub_date
-                
-                # 3. עדיפות 3: חזרה לשגרה
+                # 1. עדיפות עליונה: הודעת שחרור (מוריד הכל מיד)
                 if any(rw in title for rw in release_words):
                     return "RELEASE", f"({diff_min} דק') {title}", pub_date
                 
-                # 4. מידע חדשותי בלבד
-                if any(word in title for word in ["הרוג", "נפילה", "מד\"א"]):
+                # 2. עדיפות שנייה: אזעקה מפורשת במיקום שלך (100%)
+                if any(aa in title for aa in active_alarm) and any(tz in title for tz in target_zones):
+                    return "ALARM_100", f"({diff_min} דק') {title}", pub_date
+                
+                # 3. עדיפות שלישית: זוהו שיגורים למרכז/איראן (95% - דריכות גבוהה אך לא אזעקה)
+                if any(il in title for il in immediate_launches):
+                    if any(tz in title for tz in target_zones) or "איראן" in title:
+                        return "LAUNCH_95", f"({diff_min} דק') {title}", pub_date
+                
+                # 4. מידע חדשותי
+                if any(word in title for word in ["הרוג", "נפילה", "מד\"א", "יירוט"]):
                     return "INFO_ONLY", f"({diff_min} דק') {title}", pub_date
                     
         return "GREEN", "", None
@@ -59,7 +60,8 @@ def get_source_status(url, name):
 def get_risk(dt, global_status):
     if global_status == "ALARM_100": return 100.0
     if global_status == "LAUNCH_95": return 95.0
-    if global_status == "RELEASE": return 12.0
+    if global_status == "RELEASE": return 11.5 # רמת שגרה בטוחה
+    # שגרה רגילה
     hour = dt.hour + dt.minute / 60.0
     base = 10 + 5 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
     return max(min(base, 100), 4.2)
@@ -74,7 +76,8 @@ def auto_refresh_hamaal():
         res, msg, _ = get_source_status(url, name)
         source_results[name] = res
         
-        # לוגיקת הכרעה היררכית - האזעקה תמיד מנצחת
+        # לוגיקת הכרעה:
+        # הודעת שחרור תמיד "מנקה" את המצב אלא אם יש במקביל אזעקה חדשה לגמרי
         if res == "ALARM_100":
             global_status = "ALARM_100"
         elif res == "LAUNCH_95" and global_status != "ALARM_100":
@@ -86,12 +89,10 @@ def auto_refresh_hamaal():
 
     current_val = get_risk(now, global_status)
     display_color = {"ALARM_100": "#ff1a1a", "LAUNCH_95": "#ff4400", "RELEASE": "#00ff00", "GREEN": "#00ff00"}.get(global_status, "#00ff00")
-    if any(r == "INFO_ONLY" for r in source_results.values()) and global_status == "GREEN":
-        display_color = "#ffaa00"
 
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {display_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {display_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | V27 SYNCED</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | V29 PRECISION</p>
             <h1 style="color: {display_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {display_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
                 <span style="color: {display_color};">●</span> {now.strftime('%H:%M:%S')} 
@@ -103,7 +104,7 @@ def auto_refresh_hamaal():
         st.markdown(f"""<div style="background: rgba(20,20,20,0.9); color: white; padding: 15px; margin: 15px 0; border-radius: 8px; border: 1px solid {display_color}; text-align: center; font-weight: bold;">{latest_msg}</div>""", unsafe_allow_html=True)
     else: st.markdown("<div style='height: 62px;'></div>", unsafe_allow_html=True)
 
-    # גרף ללא זום
+    # גרף
     base_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
     full_day_times = [base_time + timedelta(minutes=i) for i in range(1440)]
     full_day_values = [get_risk(t, "GREEN") for t in full_day_times]
