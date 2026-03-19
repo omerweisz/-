@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 
 # הגדרות דף
-st.set_page_config(page_title="חמ\"ל עבר הירקון - V25 GRADUATED RISK", layout="wide")
+st.set_page_config(page_title="חמ\"ל עבר הירקון - V26 FULL CYCLE", layout="wide")
 
 st.markdown("""
     <style>
@@ -19,39 +19,41 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def get_source_status(url, name):
-    # הגדרות מילים
-    active_alarm = ["אזעקה", "צבע אדום", "התרעות הופעלו"]
-    launches_detected = ["שיגור", "שיגורים", "זוהו שיגורים", "חדירת כלי טיס"]
-    news_only = ["הרוג", "פצוע", "נזק", "פגיעה", "מד\"א", "נפילה"]
-    release_words = ["חזרה לשגרה", "הסרת הגבלות", "ניתן לצאת"]
+    # מילים קריטיות לאזעקה פעילה
+    active_alarm = ["אזעקה", "צבע אדום", "התרעות הופעלו", "חדירת כלי טיס עויינת"]
+    # מילים לשיגורים (לפני אזעקה)
+    launches = ["שיגור", "שיגורים", "זוהו שיגורים"]
+    # מילים לחזרה לשגרה
+    release_words = ["חזרה לשגרה", "הסרת הגבלות", "ניתן לצאת", "ארגעה", "סיום האירוע"]
+    # אזורי עניין
     target_zones = ["תל אביב", "גוש דן", "מרכז", "עבר הירקון", "גלילות", "רמת אביב", "חולון", "רמת גן", "בני ברק", "פתח תקווה"]
     
     now = datetime.now(timezone(timedelta(hours=2)))
     try:
         response = requests.get(url, timeout=2.5)
         root = ET.fromstring(response.content)
-        items = root.findall('.//item')[:10]
+        items = root.findall('.//item')[:15]
         for item in items:
             title = item.find('title').text
             pub_date = parser.parse(item.find('pubDate').text)
             diff_min = int((now - pub_date).total_seconds() / 60)
             
-            if 0 <= diff_min <= 20:
-                # 1. שחרור
+            if 0 <= diff_min <= 15: # חלון זמן קצר יותר לתגובה מהירה
+                # 1. עדיפות עליונה: חזרה לשגרה (מוריד אחוזים)
                 if any(rw in title for rw in release_words):
                     return "RELEASE", f"({diff_min} דק') {title}", pub_date
                 
-                # 2. אזעקה פעילה (100%)
+                # 2. אזעקה מפורשת (100%)
                 if any(aa in title for aa in active_alarm) and any(tz in title for tz in target_zones):
                     return "ALARM_100", f"({diff_min} דק') {title}", pub_date
                 
                 # 3. זוהו שיגורים (95%)
-                if any(ld in title for ld in launches_detected):
+                if any(l in title for l in launches):
                     if any(tz in title for tz in target_zones) or "איראן" in title:
                         return "LAUNCH_95", f"({diff_min} דק') {title}", pub_date
                 
-                # 4. מידע כללי (הודעה בלבד)
-                if any(no in title for no in news_only):
+                # 4. מידע חדשותי (הודעה בלבד)
+                if any(word in title for word in ["הרוג", "נפילה", "מד\"א", "יירוט"]):
                     return "INFO_ONLY", f"({diff_min} דק') {title}", pub_date
                     
         return "GREEN", "", None
@@ -60,8 +62,8 @@ def get_source_status(url, name):
 def get_risk(dt, global_status):
     if global_status == "ALARM_100": return 100.0
     if global_status == "LAUNCH_95": return 95.0
-    if global_status == "RELEASE": return 15.0
-    # שגרה
+    if global_status == "RELEASE": return 12.5 # רמת שגרה נמוכה אחרי אירוע
+    # שגרה רגילה
     hour = dt.hour + dt.minute / 60.0
     base = 10 + 5 * (1 - math.cos(math.pi * (hour - 3) / 12)) 
     return max(min(base, 100), 4.2)
@@ -70,33 +72,33 @@ def get_risk(dt, global_status):
 def auto_refresh_hamaal():
     now = datetime.now(timezone(timedelta(hours=2)))
     sources_map = {"YNET": "https://www.ynet.co.il/Integration/StoryRss1854.xml", "וואלה": "https://rss.walla.co.il/feed/1?type=main", "ישראל היום": "https://www.israelhayom.co.il/rss.xml", "צופר": "https://www.tzevaadom.co.il/rss"}
-    source_results = {}; global_status = "GREEN"; latest_msg = ""; last_event_time = None
+    source_results = {}; global_status = "GREEN"; latest_msg = ""
     
     for name, url in sources_map.items():
-        res, msg, p_date = get_source_status(url, name)
+        res, msg, _ = get_source_status(url, name)
         source_results[name] = res
         
-        # לוגיקת עדיפות
+        # לוגיקת הכרעה היררכית
         if res == "ALARM_100":
             global_status = "ALARM_100"
         elif res == "LAUNCH_95" and global_status != "ALARM_100":
             global_status = "LAUNCH_95"
         elif res == "RELEASE" and global_status not in ["ALARM_100", "LAUNCH_95"]:
             global_status = "RELEASE"
-            
+        
         if msg: latest_msg = msg
 
     current_val = get_risk(now, global_status)
     
-    # בחירת צבע
-    display_color = "#00ff00"
-    if global_status == "ALARM_100": display_color = "#ff1a1a"
-    elif global_status == "LAUNCH_95": display_color = "#ff4400" # כתום חזק לשיגורים
-    elif any(r == "INFO_ONLY" for r in source_results.values()): display_color = "#ffaa00"
+    # עיצוב צבעים
+    display_color = "#00ff00" # ירוק שגרה
+    if global_status == "ALARM_100": display_color = "#ff1a1a" # אדום אזעקה
+    elif global_status == "LAUNCH_95": display_color = "#ff4400" # כתום שיגורים
+    elif any(r == "INFO_ONLY" for r in source_results.values()): display_color = "#ffaa00" # צהוב חדשות
 
     st.markdown(f"""
         <div style="text-align: center; padding: 20px; border: 1px solid {display_color}44; border-radius: 15px; background: rgba(0,0,0,0.5); box-shadow: 0 0 25px {display_color}20;">
-            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | V25 GRADUATED-RISK</p>
+            <p style="color: #FFFFFF; font-size: 10px; margin: 0; letter-spacing: 3px; font-weight: bold; opacity: 0.8;">UNIT: EVER HAYARKON | V26 OPERATIONAL</p>
             <h1 style="color: {display_color}; font-size: 85px; margin: 5px 0; font-family: 'JetBrains Mono'; text-shadow: 0 0 20px {display_color}88;">{current_val:.1f}%</h1>
             <div style="color: #FFFFFF; font-size: 13px; font-family: 'JetBrains Mono';">
                 <span style="color: {display_color};">●</span> {now.strftime('%H:%M:%S')} 
